@@ -165,17 +165,36 @@ const DEFAULT_STATE={ groupResults:SEED_RESULTS, ko:[], awards:{champion:null},
   scorers:[], keepers:[], autoScorers:[], odds:{}, liveMatches:[], liveCount:0, lastSync:null, syncError:null };
 const hasStore = typeof window!=="undefined" && window.storage;
 
+const TABS=[["leaderboard","Leaderboard"],["h2h","Head-to-head"],["groups","Groups"],["knockouts","Knockouts"],["awards","Awards & stats"]];
+const TAB_KEYS=new Set(TABS.map(([k])=>k));
+const DEFAULT_TAB="leaderboard";
+function tabFromHash(){
+  const id=location.hash.replace(/^#/,"").trim();
+  if(!id) return DEFAULT_TAB;
+  return TAB_KEYS.has(id)?id:DEFAULT_TAB;
+}
+function selectTab(tab,setTab){
+  setTab(tab);
+  const next="#"+tab;
+  if(location.hash!==next) location.hash=tab;
+}
+
 /* ============================================================ */
 function App(){
   const [state,setState]=useState(DEFAULT_STATE);
   const [loaded,setLoaded]=useState(false);
-  const [tab,setTab]=useState("leaderboard");
+  const [tab,setTab]=useState(tabFromHash);
   const [syncing,setSyncing]=useState(false);
   const [themePref,setThemePref]=useState(readThemePref);
   const stateRef=useRef(state);
   stateRef.current=state;
 
   useEffect(()=>{ applyTheme(themePref); try{localStorage.setItem(THEME_KEY,themePref);}catch(e){} },[themePref]);
+  useEffect(()=>{
+    const onHash=()=>setTab(tabFromHash());
+    window.addEventListener("hashchange",onHash);
+    return ()=>window.removeEventListener("hashchange",onHash);
+  },[]);
   useEffect(()=>{
     if(themePref!=="system") return;
     const mq=window.matchMedia("(prefers-color-scheme:dark)");
@@ -257,7 +276,6 @@ function App(){
   const lastPlayer=A.ownerRanked[A.ownerRanked.length-1];
   const goalsLeader=A.goalsLeader;
   const liveMatchMap={}; (state.liveMatches||[]).forEach(m=>{const k=[m.a,m.b].sort().join("|");liveMatchMap[k]=m;});
-  const TABS=[["leaderboard","Leaderboard"],["h2h","Head-to-head"],["groups","Groups"],["knockouts","Knockouts"],["awards","Awards & stats"]];
 
   return (
     <Shell>
@@ -283,7 +301,7 @@ function App(){
 
       <nav className="wc-tabs" aria-label="Sections">
         {TABS.map(([k,l])=>(
-          <button key={k} type="button" className={"wc-tab"+(tab===k?" is-on":"")} onClick={()=>setTab(k)}>{l}</button>
+          <button key={k} type="button" className={"wc-tab"+(tab===k?" is-on":"")} onClick={()=>selectTab(k,setTab)}>{l}</button>
         ))}
       </nav>
 
@@ -708,7 +726,9 @@ function GroupFixtures({L,groupResults,liveMatchMap}){
             <span className="wc-fixture-home"><FlagDot team={fx.a}/>{fx.a}</span>
             <span className="wc-fixture-score">{played?`${r.hs} – ${r.as}`:"vs"}</span>
             <span className="wc-fixture-away">{fx.b}<FlagDot team={fx.b}/></span>
-            {isLive&&<><span className="wc-live-badge">Live</span>{lm?.clock&&<span className="wc-fixture-clock">{lm.clock}</span>}</>}
+            <span className="wc-fixture-meta">
+              {isLive&&<><span className="wc-live-badge">Live</span>{lm?.clock&&<span className="wc-fixture-clock">{lm.clock}</span>}</>}
+            </span>
           </div>
         );
       })}
@@ -1099,13 +1119,14 @@ function Style(){ return <style>{`
 
   /* ── FIXTURE STRIP ───────────────────────────────────────────────────────── */
   .wc-fixture-strip{border-top:1px solid var(--line);margin-top:10px;padding-top:8px;display:grid;gap:4px}
-  .wc-fixture-row{display:flex;align-items:center;gap:6px;font:500 12px 'DM Sans',sans-serif;color:var(--muted);padding:3px 0}
+  .wc-fixture-row{display:grid;grid-template-columns:1fr auto 1fr 72px;align-items:center;gap:6px;font:500 12px 'DM Sans',sans-serif;color:var(--muted);padding:3px 0}
   .wc-fixture-row.is-live{color:var(--text)}
-  .wc-fixture-home{flex:1;display:flex;align-items:center;gap:5px;justify-content:flex-end;text-align:right}
-  .wc-fixture-away{flex:1;display:flex;align-items:center;gap:5px;text-align:left}
+  .wc-fixture-home{display:flex;align-items:center;gap:5px;justify-content:flex-end;text-align:right}
+  .wc-fixture-away{display:flex;align-items:center;gap:5px;text-align:left}
   .wc-fixture-score{font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:700;color:var(--text);min-width:44px;text-align:center;white-space:nowrap}
   .wc-fixture-row.is-live .wc-fixture-score{color:var(--gold)}
-  .wc-fixture-clock{font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:700;color:var(--live);margin-left:4px}
+  .wc-fixture-meta{display:flex;align-items:center;gap:4px;justify-content:flex-end;white-space:nowrap}
+  .wc-fixture-clock{font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:700;color:var(--live)}
 
   /* ── RESPONSIVE ─────────────────────────────────────────────────────────── */
   @media (min-width:700px){
