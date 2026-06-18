@@ -138,6 +138,12 @@ function computeStandings(L,results){
   st.forEach((x,k)=>x.rank=k+1); return st;
 }
 const groupDone=(L,r)=>FIXTURES[L].every(fx=>r[fx.id]&&r[fx.id].hs!=null);
+const groupDoneConfirmed=(L,r)=>FIXTURES[L].every(fx=>r[fx.id]&&r[fx.id].hs!=null&&r[fx.id].src!=="live");
+function confirmedState(s){
+  const gr={}; Object.entries(s.groupResults||{}).forEach(([k,v])=>{ if(v.src!=="live") gr[k]=v; });
+  const ko=(s.ko||[]).filter(m=>m.src!=="live");
+  return {...s,groupResults:gr,ko};
+}
 function koWL(m){ if(m.hs==null||m.as==null)return null; if(m.hs>m.as)return{w:m.a,l:m.b}; if(m.hs<m.as)return{w:m.b,l:m.a};
   if(m.pa!=null&&m.pb!=null&&m.pa!==m.pb)return m.pa>m.pb?{w:m.a,l:m.b}:{w:m.b,l:m.a}; return null; }
 
@@ -238,7 +244,11 @@ function App(){
     return ()=>{ cancelled=true; clearTimeout(pollRef.current); document.removeEventListener("visibilitychange",onVis); };
   },[loaded,runSync]);
 
-  const A=useMemo(()=>analyse(state),[state]);
+  const {A,Aconf,liveActive,liveTeams}=useMemo(()=>{
+    const liveActive=(state.liveCount||0)>0;
+    const liveTeams=new Set((state.liveMatches||[]).flatMap(m=>[m.a,m.b]));
+    return {A:analyse(state),Aconf:analyse(confirmedState(state)),liveActive,liveTeams};
+  },[state]);
   if(!loaded) return <Shell><Style/><div className="loading-msg">Loading the sweepstake…</div></Shell>;
 
   const standing=OWNERS.filter(o=>!A.owner[o].out).length;
@@ -246,6 +256,7 @@ function App(){
   const leader=A.ownerRanked[0];
   const lastPlayer=A.ownerRanked[A.ownerRanked.length-1];
   const goalsLeader=A.goalsLeader;
+  const liveMatchMap={}; (state.liveMatches||[]).forEach(m=>{const k=[m.a,m.b].sort().join("|");liveMatchMap[k]=m;});
   const TABS=[["leaderboard","Leaderboard"],["h2h","Head-to-head"],["groups","Groups"],["knockouts","Knockouts"],["awards","Awards & stats"]];
 
   return (
@@ -277,10 +288,10 @@ function App(){
       </nav>
 
       <main className="wc-main">
-        {tab==="leaderboard" && <Leaderboard A={A}/>}
-        {tab==="h2h" && <HeadToHead A={A}/>}
-        {tab==="groups" && <GroupsView A={A}/>}
-        {tab==="knockouts" && <KnockoutsView state={state} A={A}/>}
+        {tab==="leaderboard" && <Leaderboard A={A} Aconf={Aconf} liveActive={liveActive} liveTeams={liveTeams}/>}
+        {tab==="h2h" && <HeadToHead A={A} Aconf={Aconf} liveActive={liveActive}/>}
+        {tab==="groups" && <GroupsView A={A} Aconf={Aconf} state={state} liveTeams={liveTeams} liveMatchMap={liveMatchMap}/>}
+        {tab==="knockouts" && <KnockoutsView state={state} A={A} liveMatchMap={liveMatchMap}/>}
         {tab==="awards" && <AwardsView A={A}/>}
       </main>
 
@@ -444,11 +455,11 @@ function analyse(state){
 
   const koLosers=new Set(); const koStats={}; ALL_TEAMS.forEach(t=>koStats[t]={p:0,w:0,d:0,l:0,gf:0,ga:0});
   const clashes=[];
-  const add=(stage,a,b,ga,gb,pens)=>clashes.push({stage,a,b,ga,gb,pens,oa:OWNER_OF[a],ob:OWNER_OF[b]});
-  GROUP_LETTERS.forEach(L=>FIXTURES[L].forEach(fx=>{const r=results[fx.id]; if(r&&r.hs!=null) add("Group "+L,fx.a,fx.b,r.hs,r.as,null);}));
+  const add=(stage,a,b,ga,gb,pens,live=false)=>clashes.push({stage,a,b,ga,gb,pens,oa:OWNER_OF[a],ob:OWNER_OF[b],live});
+  GROUP_LETTERS.forEach(L=>FIXTURES[L].forEach(fx=>{const r=results[fx.id]; if(r&&r.hs!=null) add("Group "+L,fx.a,fx.b,r.hs,r.as,null,r.src==="live");}));
   ko.forEach(m=>{ if(m.hs==null||m.as==null) return; const SA=koStats[m.a],SB=koStats[m.b];
     if(SA&&SB){SA.p++;SB.p++;SA.gf+=m.hs;SA.ga+=m.as;SB.gf+=m.as;SB.ga+=m.hs; if(m.hs>m.as){SA.w++;SB.l++;}else if(m.hs<m.as){SB.w++;SA.l++;}else{SA.d++;SB.d++;}}
-    const wl=koWL(m); if(wl) koLosers.add(wl.l); add(m.round,m.a,m.b,m.hs,m.as,(m.pa!=null&&m.pb!=null)?[m.pa,m.pb]:null); });
+    const wl=koWL(m); if(wl) koLosers.add(wl.l); add(m.round,m.a,m.b,m.hs,m.as,(m.pa!=null&&m.pb!=null)?[m.pa,m.pb]:null,m.src==="live"); });
 
   const teamOut={};
   ALL_TEAMS.forEach(t=>{ if(koLosers.has(t)){teamOut[t]=true;return;} const L=GROUP_OF[t];
@@ -592,14 +603,23 @@ function LiveBar({matches}){
   );
 }
 
-function Leaderboard({A}){
+function Leaderboard({A,Aconf,liveActive,liveTeams}){
+  const confRank={},confOdds={};
+  (Aconf||A).ownerRanked.forEach((O,i)=>{ confRank[O.owner]=i+1; confOdds[O.owner]=O.odds; });
   return (
     <div className="wc-players">
+      {liveActive&&<ProvisionalBanner/>}
       {A.ownerRanked.map((O,i)=>{ const lead=i===0&&!O.out;
+        const cr=confRank[O.owner], co=confOdds[O.owner];
+        const rankDelta=liveActive&&cr!=null&&cr!==(i+1)?cr-(i+1):0;
+        const oddsDelta=liveActive&&co!=null&&Math.abs(co-O.odds)>=0.05;
         return (
           <article key={O.owner} className={"wc-player wc-card"+(lead?" wc-player--lead":"")+(O.out?" is-out":"")}>
             <div className="wc-player-top">
-              <span className="wc-player-rank">{i+1}</span>
+              <div className="wc-player-rank-col">
+                <span className="wc-player-rank">{i+1}</span>
+                {rankDelta!==0&&<span className={"wc-rank-delta "+(rankDelta>0?"wc-rank-delta--up":"wc-rank-delta--down")}>{rankDelta>0?"↑":"↓"}{Math.abs(rankDelta)}</span>}
+              </div>
               <Crest owner={O.owner} size={40}/>
               <div className="wc-player-info">
                 <div className="wc-player-name-row">
@@ -611,72 +631,123 @@ function Leaderboard({A}){
               </div>
               <div className="wc-player-odds">
                 <span className="wc-odds-val">{O.odds.toFixed(1)}%</span>
+                {oddsDelta&&<span className="wc-prev">was {co.toFixed(1)}%</span>}
                 <span className="wc-odds-lbl">Trophy odds</span>
               </div>
             </div>
             <div className="wc-bar"><div className="wc-bar-fill" style={{width:`${Math.min(100,O.odds)}%`}}/></div>
-            <div className="wc-team-tags">{O.teams.map(t=><span key={t} className={"wc-team-tag"+(A.teamOut[t]?" is-out":"")}><FlagDot team={t}/>{t}</span>)}</div>
+            <div className="wc-team-tags">{O.teams.map(t=>{
+              const isLive=liveActive&&liveTeams.has(t);
+              return (<span key={t} className={"wc-team-tag"+(A.teamOut[t]?" is-out":"")+(isLive?" is-live":"")}>
+                <FlagDot team={t}/>{t}{isLive&&<span className="wc-live-dot">Live</span>}
+              </span>);
+            })}</div>
           </article>
         );})}
     </div>
   );
 }
 
-function HeadToHead({A}){
+function HeadToHead({A,Aconf,liveActive}){
+  const confH2H={};
+  (Aconf||A).h2hRanked.forEach(O=>{ confH2H[O.owner]=O; });
   return (
     <div>
       <p className="section-note">Every match where two pooled teams meet. Same-player clashes count both ways; penalty knockouts count as a draw.</p>
+      {liveActive&&<ProvisionalBanner/>}
       <div className="wc-table-wrap" style={{marginBottom:20}}>
         <table className="lt"><thead><tr><th style={{textAlign:"left",paddingLeft:14}}>Player</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th><th className="sorted">Pts</th></tr></thead>
-          <tbody>{A.h2hRanked.map(O=>(
-            <tr key={O.owner}><td style={{textAlign:"left",paddingLeft:14}}><span style={{display:"inline-flex",alignItems:"center",gap:8}}><Crest owner={O.owner} size={22}/><b style={{color:"var(--text)"}}>{O.owner}</b></span></td>
-              <td>{O.p}</td><td>{O.w}</td><td>{O.d}</td><td>{O.l}</td><td>{O.gf}</td><td>{O.ga}</td><td>{O.gd>=0?"+":""}{O.gd}</td><td className="sorted"><b style={{color:"var(--text)"}}>{O.pts}</b></td></tr>))}</tbody>
+          <tbody>{A.h2hRanked.map(O=>{
+            const prev=confH2H[O.owner];
+            const ptsDiff=liveActive&&prev&&prev.pts!==O.pts;
+            return (<tr key={O.owner}><td style={{textAlign:"left",paddingLeft:14}}><span style={{display:"inline-flex",alignItems:"center",gap:8}}><Crest owner={O.owner} size={22}/><b style={{color:"var(--text)"}}>{O.owner}</b></span></td>
+              <td>{O.p}</td><td>{O.w}</td><td>{O.d}</td><td>{O.l}</td><td>{O.gf}</td><td>{O.ga}</td><td>{O.gd>=0?"+":""}{O.gd}</td>
+              <td className="sorted"><b style={{color:"var(--text)"}}>{O.pts}</b>{ptsDiff&&<span className="wc-prev"> ({prev.pts})</span>}</td></tr>);})}</tbody>
         </table>
       </div>
       <h2 className="section-title">The clashes</h2>
       {A.clashes.length===0 && <div className="wc-card wc-empty">No two pooled teams have met yet.</div>}
       <div className="wc-stack">{A.clashes.map((c,i)=>{
         const same=c.oa===c.ob;
-        const winTeam=c.ga>c.gb?c.a:c.ga<c.gb?c.b:(c.pens?(c.pens[0]>c.pens[1]?c.a:c.b):null);
+        const winTeam=!c.live?(c.ga>c.gb?c.a:c.ga<c.gb?c.b:(c.pens?(c.pens[0]>c.pens[1]?c.a:c.b):null)):null;
         const winOwner=winTeam?OWNER_OF[winTeam]:null;
+        const leadTeam=c.live?(c.ga>c.gb?c.a:c.ga<c.gb?c.b:null):null;
         return (
-          <div key={i} className="wc-card wc-match">
-            <div className="wc-match-stage">{c.stage}{same?" · same player":""}</div>
-            <ClashSide team={c.a} owner={c.oa} score={c.ga} pen={c.pens?c.pens[0]:null} lose={winTeam&&winTeam!==c.a}/>
+          <div key={i} className={"wc-card wc-match"+(c.live?" is-live":"")}>
+            <div className="wc-match-stage">
+              {c.live&&<span className="wc-live-badge" style={{marginRight:6}}>Live</span>}
+              {c.stage}{same?" · same player":""}
+            </div>
+            <ClashSide team={c.a} owner={c.oa} score={c.ga} pen={c.pens?c.pens[0]:null} lose={winTeam&&winTeam!==c.a} lead={leadTeam===c.a}/>
             <div style={{height:1,background:"var(--line)",margin:"2px 0"}}/>
-            <ClashSide team={c.b} owner={c.ob} score={c.gb} pen={c.pens?c.pens[1]:null} lose={winTeam&&winTeam!==c.b}/>
-            <div className="wc-match-foot" style={{color:same?"var(--accent)":(winOwner?OWNER_COLOR[winOwner]:undefined)}}>{same?`Both results count for ${c.oa}`:(winOwner?`${winOwner} wins the bragging rights`:"Honours even")}</div>
+            <ClashSide team={c.b} owner={c.ob} score={c.gb} pen={c.pens?c.pens[1]:null} lose={winTeam&&winTeam!==c.b} lead={leadTeam===c.b}/>
+            <div className="wc-match-foot" style={{color:same?"var(--accent)":(winOwner?OWNER_COLOR[winOwner]:undefined)}}>
+              {c.live?"In progress":(same?`Both results count for ${c.oa}`:(winOwner?`${winOwner} wins the bragging rights`:"Honours even"))}
+            </div>
           </div>);})}</div>
     </div>
   );
 }
-function ClashSide({team,owner,score,pen,lose}){
+function ClashSide({team,owner,score,pen,lose,lead}){
   return (<div className="wc-clash-side" style={{opacity:lose?.55:1}}>
-    <FlagDot team={team}/><span className="wc-clash-team">{team}</span>
+    <FlagDot team={team}/><span className={"wc-clash-team"+(lead?" is-lead":"")}>{team}</span>
     {owner&&<span className="owntag" style={{color:OWNER_COLOR[owner]}}>{owner}</span>}
     <span className="wc-clash-score">{score}{pen!=null?<sup className="wc-pen"> ({pen})</sup>:null}</span></div>);
 }
 
-function GroupsView({A}){
+function GroupFixtures({L,groupResults,liveMatchMap}){
+  return (
+    <div className="wc-fixture-strip">
+      {FIXTURES[L].map(fx=>{
+        const r=groupResults[fx.id];
+        const isLive=r?.src==="live";
+        const played=r&&r.hs!=null;
+        const lm=played&&isLive?liveMatchMap[[fx.a,fx.b].sort().join("|")]:null;
+        return (
+          <div key={fx.id} className={"wc-fixture-row"+(isLive?" is-live":"")}>
+            <span className="wc-fixture-home"><FlagDot team={fx.a}/>{fx.a}</span>
+            <span className="wc-fixture-score">{played?`${r.hs} – ${r.as}`:"vs"}</span>
+            <span className="wc-fixture-away">{fx.b}<FlagDot team={fx.b}/></span>
+            {isLive&&<><span className="wc-live-badge">Live</span>{lm?.clock&&<span className="wc-fixture-clock">{lm.clock}</span>}</>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+function GroupsView({A,Aconf,state,liveTeams,liveMatchMap}){
+  const confSt=(Aconf||A).standings;
+  const liveActive=liveTeams&&liveTeams.size>0;
   return (
     <div className="wc-groups">
+      {liveActive&&<ProvisionalBanner/>}
       {GROUP_LETTERS.map(L=>{const st=A.standings[L];
+        const confStL=confSt[L]||[];
+        const confRankMap={};confStL.forEach(s=>{ confRankMap[s.name]=s.rank; });
+        const hasLiveInGroup=liveActive&&GROUPS[L].some(t=>liveTeams.has(t));
+        const groupComplete=(Aconf||A).complete[L];
         return (
           <div key={L} className="wc-card wc-group">
             <div className="wc-group-head">
               <span className="wc-group-badge">{L}</span>
               <span className="wc-group-title">Group {L}</span>
-              <span className="wc-group-status">{A.complete[L]?"Complete":"In progress"}</span>
+              <span className="wc-group-status">{groupComplete?"Complete":hasLiveInGroup?"Live":"In progress"}</span>
             </div>
             <div className="wc-table-wrap">
             <table className="grp"><thead><tr><th></th><th style={{textAlign:"left"}}>Team</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th><th>Pts</th></tr></thead>
               <tbody>{st.map(s=>{const out=A.teamOut[s.name];
-                return (<tr key={s.name} style={{opacity:out?.45:1}}>
-                  <td><span className="rankdot" style={{background:s.rank<=2?"var(--qualify)":s.rank===3?(out?"var(--live)":"var(--gold)"):"var(--live)"}}>{s.rank}</span></td>
+                const confRank=confRankMap[s.name];
+                const rankChanged=liveActive&&confRank!=null&&confRank!==s.rank;
+                return (<tr key={s.name} className={rankChanged?"is-changed":""} style={{opacity:out?.45:1}}>
+                  <td>
+                    <span className="rankdot" style={{background:s.rank<=2?"var(--qualify)":s.rank===3?(out?"var(--live)":"var(--gold)"):"var(--live)"}}>{s.rank}</span>
+                    {rankChanged&&<span className={"wc-rank-delta "+(s.rank<confRank?"wc-rank-delta--up":"wc-rank-delta--down")} style={{marginLeft:3}}>{s.rank<confRank?"↑":"↓"}</span>}
+                  </td>
                   <td style={{textAlign:"left"}}><span style={{display:"inline-flex",alignItems:"center",gap:6}}><FlagDot team={s.name}/><span style={{color:"var(--text)"}}>{s.name}</span>{OWNER_OF[s.name]&&<span className="owntag" style={{color:OWNER_COLOR[OWNER_OF[s.name]]}}>{OWNER_OF[s.name]}</span>}</span></td>
                   <td>{s.p}</td><td>{s.w}</td><td>{s.d}</td><td>{s.l}</td><td>{s.gf}</td><td>{s.ga}</td><td>{s.gd>=0?"+":""}{s.gd}</td><td><b style={{color:"var(--text)"}}>{s.pts}</b></td></tr>);})}</tbody>
             </table>
             </div>
+            <GroupFixtures L={L} groupResults={state.groupResults||{}} liveMatchMap={liveMatchMap}/>
           </div>);})}
       <p className="wc-legend">
         <i className="rankdot" style={{background:"var(--qualify)"}}/> Top 2 qualify
@@ -687,7 +758,7 @@ function GroupsView({A}){
   );
 }
 
-function KnockoutsView({state,A}){
+function KnockoutsView({state,A,liveMatchMap}){
   const ko=state.ko||[]; const rounds=KO_ORDER.map(r=>[r,ko.filter(m=>m.round===r)]).filter(([,m])=>m.length);
   return (
     <div>
@@ -695,20 +766,26 @@ function KnockoutsView({state,A}){
       {rounds.map(([round,matches])=>(
         <div key={round} className="wc-ko-round">
           <h2 className="wc-round-title">{round}</h2>
-          <div className="wc-stack">{matches.map(m=><KoCard key={m.id} m={m}/>)}</div>
+          <div className="wc-stack">{matches.map(m=><KoCard key={m.id} m={m} liveMatchMap={liveMatchMap}/>)}</div>
         </div>))}
     </div>
   );
 }
-function KoCard({m}){ const wl=koWL(m); const isLive=m.src==="live";
+function KoCard({m,liveMatchMap}){ const wl=koWL(m); const isLive=m.src==="live";
+  const lm=isLive&&liveMatchMap?liveMatchMap[[m.a,m.b].sort().join("|")]:null;
   const row=(team,score,pen)=>{ const owner=OWNER_OF[team];
-  return (<div className="wc-ko-row" style={{opacity:wl&&wl.l===team?.5:1}}>
-    <FlagDot team={team}/><span className="wc-ko-team">{team}</span>{owner&&<span className="owntag" style={{color:OWNER_COLOR[owner]}}>{owner}</span>}
-    {wl&&wl.w===team&&<span className="wc-ko-won">Won</span>}
-    <span className="wc-ko-score">{score==null?"–":score}{pen!=null?<sup className="wc-pen"> ({pen})</sup>:null}</span></div>); };
+    const losing=!isLive&&wl&&wl.l===team;
+    const leading=isLive&&score!=null&&(team===m.a?m.hs>m.as:m.as>m.hs);
+    return (<div className="wc-ko-row" style={{opacity:losing?.5:1}}>
+      <FlagDot team={team}/><span className={"wc-ko-team"+(leading?" is-lead":"")}>{team}</span>
+      {owner&&<span className="owntag" style={{color:OWNER_COLOR[owner]}}>{owner}</span>}
+      {!isLive&&wl&&wl.w===team&&<span className="wc-ko-won">Won</span>}
+      <span className="wc-ko-score">{score==null?"–":score}{pen!=null?<sup className="wc-pen"> ({pen})</sup>:null}</span>
+    </div>); };
   return (<div className={"wc-card wc-ko"+(isLive?" is-live":"")}>
-    {isLive&&<div className="wc-ko-live"><span className="wc-live-badge">Live</span></div>}
-    {row(m.a,m.hs,m.pa)}<div className="wc-ko-divider"/>{row(m.b,m.as,m.pb)}</div>);
+    {isLive&&<div className="wc-ko-live"><span className="wc-live-badge">Live</span>{lm?.clock&&<span className="wc-fixture-clock" style={{marginLeft:8}}>{lm.clock}</span>}</div>}
+    {row(m.a,m.hs,m.pa)}<div className="wc-ko-divider"/>{row(m.b,m.as,m.pb)}
+  </div>);
 }
 
 function AwardsView({A}){
@@ -781,6 +858,7 @@ function BoardHead({emoji,title,sub,holder}){
 }
 
 /* ============================================================ PIECES ============================================================ */
+function ProvisionalBanner(){ return <p className="wc-provisional-note">Live — standings update every second and show where things stand right now.</p>; }
 function Crest({owner,size=28}){ return <span className="crest" style={{width:size,height:size,flex:`0 0 ${size}px`,fontSize:Math.round(size*.4),background:OWNER_COLOR[owner]}}>{owner[0]}</span>; }
 function FlagDot({team}){ return <span className="flagdot" style={{background:OWNER_COLOR[OWNER_OF[team]]||"var(--muted)"}}/>; }
 function Shell({children}){ return <div className="wc-shell"><div className="wc-ambient" aria-hidden="true"/><div className="wc-wrap">{children}</div></div>; }
@@ -1002,6 +1080,32 @@ function Style(){ return <style>{`
   th.sorted,td.sorted{color:var(--accent);font-weight:600}
   .rankdot{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 5px;border-radius:5px;font:700 11px 'DM Sans',sans-serif;color:#fff}
   i.rankdot{min-width:8px;width:8px;height:8px;padding:0;border-radius:50%}
+
+  /* ── PROVISIONAL / LIVE STATES ─────────────────────────────────────────── */
+  .wc-provisional-note{font:500 12px 'DM Sans',sans-serif;color:var(--live);background:color-mix(in srgb,var(--live) 8%,transparent);border:1px solid color-mix(in srgb,var(--live) 18%,transparent);border-radius:8px;padding:8px 12px;margin:0 0 14px;display:flex;align-items:center;gap:6px}
+  .wc-provisional-note::before{content:"●";font-size:7px;animation:wcBlink 1.1s ease-in-out infinite;flex-shrink:0}
+  .wc-prev{font:500 11px 'DM Sans',sans-serif;color:var(--muted);margin-left:4px}
+  .wc-prev::before{content:""}
+  .wc-rank-delta{font:700 10px 'DM Sans',sans-serif;line-height:1;padding:2px 4px;border-radius:3px}
+  .wc-rank-delta--up{color:var(--qualify);background:color-mix(in srgb,var(--qualify) 10%,transparent)}
+  .wc-rank-delta--down{color:var(--live);background:color-mix(in srgb,var(--live) 10%,transparent)}
+  .wc-player-rank-col{display:flex;flex-direction:column;align-items:center;gap:3px;width:34px;flex-shrink:0}
+  .wc-team-tag.is-live{border-color:color-mix(in srgb,var(--live) 30%,var(--line));color:var(--live)}
+  .wc-team-tag.is-live .wc-live-dot{font:700 8px 'DM Sans',sans-serif;letter-spacing:.06em;text-transform:uppercase;color:#fff;background:var(--live);padding:2px 5px;border-radius:3px;margin-left:4px;flex-shrink:0}
+  table.grp tr.is-changed>td:first-child{border-left:2px solid var(--live)}
+  .wc-clash-team.is-lead{color:var(--accent);font-weight:700}
+  .wc-ko-team.is-lead{color:var(--accent);font-weight:700}
+  .wc-match.is-live{border-color:color-mix(in srgb,var(--live) 28%,var(--line))}
+
+  /* ── FIXTURE STRIP ───────────────────────────────────────────────────────── */
+  .wc-fixture-strip{border-top:1px solid var(--line);margin-top:10px;padding-top:8px;display:grid;gap:4px}
+  .wc-fixture-row{display:flex;align-items:center;gap:6px;font:500 12px 'DM Sans',sans-serif;color:var(--muted);padding:3px 0}
+  .wc-fixture-row.is-live{color:var(--text)}
+  .wc-fixture-home{flex:1;display:flex;align-items:center;gap:5px;justify-content:flex-end;text-align:right}
+  .wc-fixture-away{flex:1;display:flex;align-items:center;gap:5px;text-align:left}
+  .wc-fixture-score{font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:700;color:var(--text);min-width:44px;text-align:center;white-space:nowrap}
+  .wc-fixture-row.is-live .wc-fixture-score{color:var(--gold)}
+  .wc-fixture-clock{font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:700;color:var(--live);margin-left:4px}
 
   /* ── RESPONSIVE ─────────────────────────────────────────────────────────── */
   @media (min-width:700px){
