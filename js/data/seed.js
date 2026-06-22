@@ -1,0 +1,17 @@
+export const DEFAULT_STATE = {
+  groupResults: {},
+  ko: [],
+  awards: { champion: null },
+  scorers: [],
+  keepers: [],
+  autoScorers: [],
+  odds: {},
+  liveMatches: [],
+  liveCount: 0,
+  nextScheduled: null,
+  lastSync: null,
+  syncError: null,
+  history: [],
+  matchDates: {},
+  fixtureSchedules: {},
+};
