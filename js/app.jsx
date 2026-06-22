@@ -122,7 +122,7 @@ const SEED_RESULTS={ "A-02":{hs:2,as:0,src:"auto"},"A-13":{hs:2,as:1,src:"auto"}
   "B-03":{hs:1,as:1,src:"auto"},"B-12":{hs:1,as:1,src:"auto"},"E-03":{hs:7,as:1,src:"auto"},"F-01":{hs:2,as:2,src:"auto"} };
 const DEFAULT_STATE={ groupResults:SEED_RESULTS, ko:[], awards:{champion:null},
   scorers:[], keepers:[], autoScorers:[], odds:{}, liveMatches:[], liveCount:0, nextScheduled:null,
-  lastSync:null, syncError:null, history:[], matchDates:{} };
+  lastSync:null, syncError:null, history:[], matchDates:{}, fixtureSchedules:{} };
 const hasStore = typeof window!=="undefined" && window.storage;
 
 async function loadPersistedState(){
@@ -363,7 +363,7 @@ async function fetchSearch(){
         results.push({stage:round,a,b,ga:+m.ga,gb:+m.gb,pa:m.pa==null?null:+m.pa,pb:m.pb==null?null:+m.pb}); });
     else arr.forEach(x=>{ const t=normTeam(x.t); if(OWNER_OF[t]&&x.p&&x.g!=null&&Number.isFinite(+x.g)) scorers.push({p:String(x.p),t,g:+x.g}); });
   });
-  return { results, scorers: scorers.sort((a,b)=>b.g-a.g).slice(0,15), nextScheduled:null };
+  return { results, scorers: scorers.sort((a,b)=>b.g-a.g).slice(0,15), nextScheduled:null, fixtureSchedules:[] };
 }
 
 const ESPN_URL="https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard";
@@ -389,6 +389,7 @@ async function fetchCalendarDates(){
 function numOrNull(v){const n=parseInt(v,10);return Number.isFinite(n)?n:null;}
 function isToday(iso){ const d=new Date(iso),n=new Date(); return d.getFullYear()===n.getFullYear()&&d.getMonth()===n.getMonth()&&d.getDate()===n.getDate(); }
 function fmtKickoff(iso){ return new Date(iso).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}); }
+function fmtFixtureWhen(iso){ const d=new Date(iso); return d.toLocaleDateString([],{weekday:"short",day:"numeric",month:"short"})+" · "+d.toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}); }
 function pickNextScheduled(upcoming){
   const now=Date.now();
   const pool=upcoming.filter(m=>OWNER_OF[m.a]||OWNER_OF[m.b]);
@@ -417,7 +418,7 @@ async function collectEspnEvents(dates,includeTodayBoard){
   return events;
 }
 function parseEspnEvents(events){
-  const results=[], scorerMap={}, liveMatches=[], upcoming=[]; let liveCount=0;
+  const results=[], scorerMap={}, liveMatches=[], upcoming=[], fixtureSchedules=[]; let liveCount=0;
   events.forEach(ev=>{ const comp=ev.competitions?.[0]; if(!comp) return;
     const status=comp.status?.type||{}; const state=status.state;
     const completed=status.completed??state==="post"; const live=state==="in";
@@ -425,6 +426,7 @@ function parseEspnEvents(events){
     const a=resolveTeam(home.team), b=resolveTeam(away.team); if(!a||!b) return;
     if(!completed&&!live){
       if(ev.date&&isToday(ev.date)) upcoming.push({stage:espnStage(ev,comp,a,b),a,b,start:ev.date,kickoff:fmtKickoff(ev.date),detail:status.shortDetail||status.detail||""});
+      if(ev.date){ const hit=FIXTURE_INDEX[[a,b].sort().join("|")]; if(hit) fixtureSchedules.push({id:hit.fx.id,start:ev.date}); }
       return;
     }
     const ga=parseInt(home.score,10), gb=parseInt(away.score,10); if(!Number.isFinite(ga)||!Number.isFinite(gb)) return;
@@ -436,7 +438,7 @@ function parseEspnEvents(events){
         const tm=d.team?.id===home.team?.id?a:b; const k=nm+"|"+tm; (scorerMap[k]=scorerMap[k]||{p:nm,t:tm,g:0}).g++; } });
   });
   const scorers=Object.values(scorerMap).filter(s=>OWNER_OF[s.t]).sort((x,y)=>y.g-x.g).slice(0,15);
-  return { results, scorers, liveCount, liveMatches, nextScheduled:pickNextScheduled(upcoming) };
+  return { results, scorers, liveCount, liveMatches, nextScheduled:pickNextScheduled(upcoming), fixtureSchedules };
 }
 async function fetchESPN({scope="full"}={}){
   const liveScope=scope==="live";
@@ -518,7 +520,11 @@ function mergeLive(prev,p){
     }
   }
 
+  const fixtureSchedules={...(prev.fixtureSchedules||{})};
+  (p.fixtureSchedules||[]).forEach(({id,start})=>{ fixtureSchedules[id]=start; });
+
   next.groupResults=gr; next.ko=ko; next.matchDates=matchDates; next.history=history;
+  next.fixtureSchedules=fixtureSchedules;
   next.autoScorers=(p.scorers||[]).filter(s=>OWNER_OF[s.t]).slice(0,20);
   next.liveMatches=p.liveMatches||[]; next.liveCount=p.liveCount||0;
   next.nextScheduled=p.nextScheduled??null;
@@ -847,7 +853,7 @@ function ClashSide({team,owner,score,pen,lose,lead}){
     <span className="wc-clash-score">{score}{pen!=null?<sup className="wc-pen"> ({pen})</sup>:null}</span></div>);
 }
 
-function GroupFixtures({L,groupResults,liveMatchMap}){
+function GroupFixtures({L,groupResults,liveMatchMap,fixtureSchedules={}}){
   return (
     <div className="wc-fixture-strip">
       {FIXTURES[L].map(fx=>{
@@ -855,14 +861,17 @@ function GroupFixtures({L,groupResults,liveMatchMap}){
         const isLive=r?.src==="live";
         const played=r&&r.hs!=null;
         const lm=played&&isLive?liveMatchMap[[fx.a,fx.b].sort().join("|")]:null;
+        const when=!played&&fixtureSchedules[fx.id]?fmtFixtureWhen(fixtureSchedules[fx.id]):null;
         return (
           <div key={fx.id} className={"wc-fixture-row"+(isLive?" is-live":"")}>
             <span className="wc-fixture-home"><FlagDot team={fx.a}/>{fx.a}</span>
-            <span className="wc-fixture-score">{played?`${r.hs} – ${r.as}`:"vs"}</span>
-            <span className="wc-fixture-away">{fx.b}<FlagDot team={fx.b}/></span>
-            <span className="wc-fixture-meta">
-              {isLive&&<><span className="wc-live-badge">Live</span>{lm?.clock&&<span className="wc-fixture-clock">{lm.clock}</span>}</>}
+            <span className="wc-fixture-score">
+              {played
+                ? <><span>{r.hs} – {r.as}</span>{isLive&&<span className="wc-fixture-live-row"><span className="wc-live-badge">Live</span>{lm?.clock&&<span className="wc-fixture-clock">{lm.clock}</span>}</span>}</>
+                : <><span>vs</span>{when&&<span className="wc-fixture-when">{when}</span>}</>
+              }
             </span>
+            <span className="wc-fixture-away">{fx.b}<FlagDot team={fx.b}/></span>
           </div>
         );
       })}
@@ -901,7 +910,7 @@ function GroupsView({A,Aconf,state,liveTeams,liveMatchMap}){
                   <td>{s.p}</td><td>{s.w}</td><td>{s.d}</td><td>{s.l}</td><td>{s.gf}</td><td>{s.ga}</td><td>{s.gd>=0?"+":""}{s.gd}</td><td><b style={{color:"var(--text)"}}>{s.pts}</b></td></tr>);})}</tbody>
             </table>
             </div>
-            <GroupFixtures L={L} groupResults={state.groupResults||{}} liveMatchMap={liveMatchMap}/>
+            <GroupFixtures L={L} groupResults={state.groupResults||{}} liveMatchMap={liveMatchMap} fixtureSchedules={state.fixtureSchedules||{}}/>
           </div>);})}
       <p className="wc-legend">
         <i className="rankdot" style={{background:"var(--qualify)"}}/> Top 2 qualify
@@ -1642,7 +1651,9 @@ function Style(){ return <style>{`
 
   /* ── GROUPS ─────────────────────────────────────────────────────────────── */
   .wc-groups{display:grid;gap:10px}
-  .wc-group{padding:16px 18px 12px}
+  .wc-group{padding:16px 0 12px;overflow:hidden}
+  .wc-group .wc-group-head,.wc-group .wc-fixture-strip{padding-left:18px;padding-right:18px}
+  .wc-group .wc-table-wrap{border-left:none;border-right:none;border-radius:0;margin:0}
   .wc-group-head{display:flex;align-items:center;gap:10px;margin-bottom:12px}
   .wc-group-badge{width:30px;height:30px;border-radius:6px;background:linear-gradient(135deg,var(--red),var(--navy));color:#fff;font:900 13px 'Barlow Condensed',sans-serif;display:flex;align-items:center;justify-content:center;flex-shrink:0;letter-spacing:.02em}
   .wc-group-title{font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text)}
@@ -1719,14 +1730,15 @@ function Style(){ return <style>{`
   .wc-match.is-live{border-color:color-mix(in srgb,var(--live) 28%,var(--line))}
 
   /* ── FIXTURE STRIP ───────────────────────────────────────────────────────── */
-  .wc-fixture-strip{border-top:1px solid var(--line);margin-top:10px;padding-top:8px;display:grid;gap:4px}
-  .wc-fixture-row{display:grid;grid-template-columns:1fr auto 1fr 72px;align-items:center;gap:6px;font:500 12px 'DM Sans',sans-serif;color:var(--muted);padding:3px 0}
+  .wc-fixture-strip{border-top:1px solid var(--line);margin-top:10px;padding-top:8px;display:flex;flex-direction:column;gap:4px}
+  .wc-fixture-row{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;font:500 12px 'DM Sans',sans-serif;color:var(--muted);padding:3px 0}
   .wc-fixture-row.is-live{color:var(--text)}
-  .wc-fixture-home{display:flex;align-items:center;gap:5px;justify-content:flex-end;text-align:right}
-  .wc-fixture-away{display:flex;align-items:center;gap:5px;text-align:left}
-  .wc-fixture-score{font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:700;color:var(--text);min-width:44px;text-align:center;white-space:nowrap}
+  .wc-fixture-home{display:flex;align-items:center;gap:5px;justify-content:flex-start;text-align:left;min-width:0;overflow:hidden;white-space:nowrap}
+  .wc-fixture-away{display:flex;align-items:center;gap:5px;justify-content:flex-end;text-align:right;min-width:0;overflow:hidden;white-space:nowrap}
+  .wc-fixture-score{font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:700;color:var(--text);text-align:center;display:flex;flex-direction:column;align-items:center;gap:2px;min-width:52px}
+  .wc-fixture-when{font-family:'DM Sans',sans-serif;font-size:10px;font-weight:400;color:var(--muted);line-height:1.3;text-align:center;white-space:nowrap}
+  .wc-fixture-live-row{display:flex;align-items:center;gap:4px;justify-content:center}
   .wc-fixture-row.is-live .wc-fixture-score{color:var(--gold)}
-  .wc-fixture-meta{display:flex;align-items:center;gap:4px;justify-content:flex-end;white-space:nowrap}
   .wc-fixture-clock{font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:700;color:var(--live)}
 
   /* ── PRIZES ─────────────────────────────────────────────────────────────── */
