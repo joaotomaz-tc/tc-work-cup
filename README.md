@@ -1,12 +1,13 @@
 # tc-work-cup
 
 ### 2026 world cup 
-- 13 players
+- 14 players
 - 3 teams per player
 
-Winner - Worl cup winner team
-Team with most goals - 2nd place
-First player to be kick out - win booze from the winner
+**Prize rules:**
+1. 🏆 **Cup Winner** — player whose team wins the World Cup final
+2. 🥈 **Most Goals** — player whose team scores the most goals across the whole tournament (group + knockouts)
+3. 🍻 **Booze Bet** — first player to have all 3 teams eliminated wins a drink from the Cup Winner
 
 ### Megan
 Uzbekistan, Turkey, Colombia

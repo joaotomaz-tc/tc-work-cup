@@ -1,12 +1,12 @@
 const { useState, useEffect, useMemo, useRef, useCallback } = React;
 
-
 /* ============================================================
    TC WORK CUP 2026 — OFFICE SWEEPSTAKE TRACKER
    • Live sync via ESPN calendar + scoreboard (1s when in play)
    • Trophy odds from real bookmaker prices, re-normalised live
    • True player-vs-player head-to-head
    • Golden Boot (scorers) + Golden Glove (clean sheets, derived)
+   • Prizes / My Teams / Drama / Stats tabs
    • Shared storage => one URL for the whole team
    ============================================================ */
 
@@ -50,7 +50,6 @@ const GROUP_LETTERS = Object.keys(GROUPS);
 const GROUP_OF = {}; GROUP_LETTERS.forEach(L=>GROUPS[L].forEach(t=>GROUP_OF[t]=L));
 const ALL_TEAMS = [...new Set(GROUP_LETTERS.flatMap(L => GROUPS[L]))].sort();
 
-// Real bookmaker decimal odds (mid-June 2026) -> strength.
 const BASE_ODDS = {
   "Spain":6,"France":6,"England":7,"Argentina":9,"Portugal":10,"Brazil":13,"Germany":15,
   "Netherlands":21,"Norway":26,"Belgium":34,"Croatia":41,"Uruguay":41,"Morocco":41,"United States":41,
@@ -66,7 +65,6 @@ const strength = t => 1/(BASE_ODDS[t] ?? 1500);
 const KO_ORDER = ["Round of 32","Round of 16","Quarter-final","Semi-final","Third place","Final"];
 const KO_CODE = { r32:"Round of 32", r16:"Round of 16", qf:"Quarter-final", sf:"Semi-final", "3p":"Third place", final:"Final" };
 
-// name normaliser (handles ESPN + bookmaker variants)
 const ALIAS = {
   "türkiye":"Turkey","turkiye":"Turkey","turkey":"Turkey","czech republic":"Czechia","czechia":"Czechia",
   "korea republic":"South Korea","south korea":"South Korea","republic of korea":"South Korea","korea, republic of":"South Korea",
@@ -80,7 +78,6 @@ const ALIAS = {
 function normTeam(n){ if(!n) return null; const k=String(n).trim().toLowerCase();
   if(ALIAS[k]) return ALIAS[k]; const hit=ALL_TEAMS.find(t=>t.toLowerCase()===k); return hit||n; }
 
-/* group fixtures */
 function groupFixtures(L){ const t=GROUPS[L]; const pr=[[0,1],[2,3],[0,2],[1,3],[0,3],[1,2]]; const md=[1,1,2,2,3,3];
   return pr.map((p,k)=>({id:`${L}-${p[0]}${p[1]}`,md:md[k],a:t[p[0]],b:t[p[1]]})); }
 const FIXTURES={}; GROUP_LETTERS.forEach(L=>FIXTURES[L]=groupFixtures(L));
@@ -109,6 +106,7 @@ function koWL(m){ if(m.hs==null||m.as==null)return null; if(m.hs>m.as)return{w:m
 /* storage */
 const STATE_KEY="tc-work-cup:state:v1", CONFIG_KEY="tc-work-cup:config:v1";
 const THEME_KEY="tc-work-cup:theme:v1";
+const ME_KEY="tc-work-cup:me:v1";
 function readThemePref(){ try{const v=localStorage.getItem(THEME_KEY); return v==="light"||v==="dark"||v==="system"?v:"system";}catch(e){return "system";} }
 function resolveTheme(pref){ if(pref==="light")return "light"; if(pref==="dark")return "dark"; return window.matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light"; }
 function applyTheme(pref){
@@ -118,13 +116,20 @@ function applyTheme(pref){
   const meta=document.querySelector('meta[name="theme-color"]');
   if(meta) meta.content=resolved==="dark"?"#121214":"#F5F5F7";
 }
+function readMe(){ try{const v=localStorage.getItem(ME_KEY); return OWNERS.includes(v)?v:"";}catch(e){return "";} }
+
 const SEED_RESULTS={ "A-02":{hs:2,as:0,src:"auto"},"A-13":{hs:2,as:1,src:"auto"},
   "B-03":{hs:1,as:1,src:"auto"},"B-12":{hs:1,as:1,src:"auto"},"E-03":{hs:7,as:1,src:"auto"},"F-01":{hs:2,as:2,src:"auto"} };
 const DEFAULT_STATE={ groupResults:SEED_RESULTS, ko:[], awards:{champion:null},
-  scorers:[], keepers:[], autoScorers:[], odds:{}, liveMatches:[], liveCount:0, nextScheduled:null, lastSync:null, syncError:null };
+  scorers:[], keepers:[], autoScorers:[], odds:{}, liveMatches:[], liveCount:0, nextScheduled:null,
+  lastSync:null, syncError:null, history:[], matchDates:{} };
 const hasStore = typeof window!=="undefined" && window.storage;
 
-const TABS=[["leaderboard","Leaderboard"],["h2h","Head-to-head"],["groups","Groups"],["knockouts","Knockouts"],["awards","Awards & stats"]];
+const TABS=[
+  ["leaderboard","Leaderboard"],["myteams","My Teams"],["groups","Groups"],
+  ["knockouts","Knockouts"],["h2h","Head-to-head"],["prizes","Prizes"],
+  ["drama","Drama"],["stats","Stats"],
+];
 const TAB_KEYS=new Set(TABS.map(([k])=>k));
 const DEFAULT_TAB="leaderboard";
 function tabFromHash(){
@@ -145,10 +150,12 @@ function App(){
   const [tab,setTab]=useState(tabFromHash);
   const [syncing,setSyncing]=useState(false);
   const [themePref,setThemePref]=useState(readThemePref);
+  const [me,setMe]=useState(readMe);
   const stateRef=useRef(state);
   stateRef.current=state;
 
   useEffect(()=>{ applyTheme(themePref); try{localStorage.setItem(THEME_KEY,themePref);}catch(e){} },[themePref]);
+  useEffect(()=>{ try{localStorage.setItem(ME_KEY,me);}catch(e){} },[me]);
   useEffect(()=>{
     const onHash=()=>setTab(tabFromHash());
     window.addEventListener("hashchange",onHash);
@@ -201,11 +208,7 @@ function App(){
       if(document.hidden) return liveRef.current?30000:120000;
       return liveRef.current?1000:60000;
     };
-    const schedule=()=>{
-      if(cancelled) return;
-      if(pollRef.current) clearTimeout(pollRef.current);
-      pollRef.current=setTimeout(tick,pollDelay());
-    };
+    const schedule=()=>{ if(cancelled) return; if(pollRef.current) clearTimeout(pollRef.current); pollRef.current=setTimeout(tick,pollDelay()); };
     const tick=async()=>{
       if(cancelled) return;
       const needFull=!lastFullRef.current||Date.now()-lastFullRef.current>3600000;
@@ -214,10 +217,7 @@ function App(){
       if(!cancelled) schedule();
     };
     const onVis=()=>schedule();
-    (async()=>{
-      if(!didSync.current){ didSync.current=true; await runSync({manual:true,scope:"full"}); }
-      if(!cancelled) schedule();
-    })();
+    (async()=>{ if(!didSync.current){ didSync.current=true; await runSync({manual:true,scope:"full"}); } if(!cancelled) schedule(); })();
     document.addEventListener("visibilitychange",onVis);
     return ()=>{ cancelled=true; clearTimeout(pollRef.current); document.removeEventListener("visibilitychange",onVis); };
   },[loaded,runSync]);
@@ -232,7 +232,6 @@ function App(){
   const standing=OWNERS.filter(o=>!A.owner[o].out).length;
   const teamsLeft=ALL_TEAMS.filter(t=>OWNER_OF[t]&&!A.teamOut[t]).length;
   const leader=A.ownerRanked[0];
-  const lastPlayer=A.ownerRanked[A.ownerRanked.length-1];
   const goalsLeader=A.goalsLeader;
   const liveMatchMap={}; (state.liveMatches||[]).forEach(m=>{const k=[m.a,m.b].sort().join("|");liveMatchMap[k]=m;});
 
@@ -250,13 +249,20 @@ function App(){
           <div className="wc-hero-tools">
             <ThemeToggle pref={themePref} onChange={setThemePref}/>
             <SyncBar state={state} syncing={syncing} onSync={doSync} compact/>
+            <div className="me-chip">
+              <span className="me-icon">👤</span>
+              <select className="me-select" value={me} onChange={e=>setMe(e.target.value)} aria-label="Who am I">
+                <option value="">Who am I?</option>
+                {OWNERS.map(o=><option key={o} value={o}>{o}</option>)}
+              </select>
+            </div>
           </div>
         </div>
       </header>
 
       {(state.liveCount||0)>0 && <LiveBar matches={state.liveMatches||[]}/>}
 
-      <WcWidgets standing={standing} teamsLeft={teamsLeft} leader={leader} goalsLeader={goalsLeader} lastPlayer={lastPlayer}/>
+      <WcWidgets standing={standing} teamsLeft={teamsLeft} leader={leader} goalsLeader={goalsLeader} firstOut={A.firstOut} ownerRanked={A.ownerRanked}/>
 
       {!(state.liveCount||0) && state.nextScheduled && <NextMatchBar match={state.nextScheduled}/>}
 
@@ -268,10 +274,13 @@ function App(){
 
       <main className="wc-main">
         {tab==="leaderboard" && <Leaderboard A={A} Aconf={Aconf} liveActive={liveActive} liveTeams={liveTeams}/>}
-        {tab==="h2h" && <HeadToHead A={A} Aconf={Aconf} liveActive={liveActive}/>}
+        {tab==="myteams" && <MyTeamsView A={A} state={state} me={me} setMe={setMe} liveTeams={liveTeams} liveMatchMap={liveMatchMap}/>}
         {tab==="groups" && <GroupsView A={A} Aconf={Aconf} state={state} liveTeams={liveTeams} liveMatchMap={liveMatchMap}/>}
         {tab==="knockouts" && <KnockoutsView state={state} A={A} liveMatchMap={liveMatchMap}/>}
-        {tab==="awards" && <AwardsView A={A}/>}
+        {tab==="h2h" && <HeadToHead A={A} Aconf={Aconf} liveActive={liveActive}/>}
+        {tab==="prizes" && <PrizesView A={A} state={state}/>}
+        {tab==="drama" && <DramaView A={A} state={state}/>}
+        {tab==="stats" && <StatsView A={A} state={state}/>}
       </main>
 
       <footer className="wc-foot">
@@ -283,7 +292,7 @@ function App(){
 }
 
 /* ============================================================
-   LIVE SYNC  (Anthropic web search, batched for reliability)
+   LIVE SYNC
    ============================================================ */
 const TODAY_STR = new Date().toDateString();
 async function aiSearchJSON(prompt){
@@ -323,7 +332,6 @@ async function fetchSearch(){
   return { results, scorers: scorers.sort((a,b)=>b.g-a.g).slice(0,15), nextScheduled:null };
 }
 
-/* ---- ESPN public feed (calendar + scoreboard per Public-ESPN-API docs) ---- */
 const ESPN_URL="https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard";
 const ESPN_CALENDAR="https://sports.core.api.espn.com/v2/sports/soccer/leagues/fifa.world/seasons/2026/types/3/calendar/ondays";
 const calendarCache={dates:null,at:0};
@@ -387,7 +395,7 @@ function parseEspnEvents(events){
     }
     const ga=parseInt(home.score,10), gb=parseInt(away.score,10); if(!Number.isFinite(ga)||!Number.isFinite(gb)) return;
     const stage=espnStage(ev,comp,a,b); const clock=status.shortDetail||status.detail||"";
-    results.push({stage,a,b,ga,gb,pa:numOrNull(home.shootoutScore),pb:numOrNull(away.shootoutScore),live,clock});
+    results.push({stage,a,b,ga,gb,pa:numOrNull(home.shootoutScore),pb:numOrNull(away.shootoutScore),live,clock,date:ev.date||null});
     if(live){ liveCount++; liveMatches.push({stage,a,b,ga,gb,clock}); }
     if(completed) (comp.details||[]).forEach(d=>{ const tx=(d?.type?.text||"").toLowerCase();
       if(d.scoringPlay && !/own goal/.test(tx)){ const nm=d.athletesInvolved?.[0]?.displayName; if(!nm) return;
@@ -427,7 +435,56 @@ function mergeLive(prev,p){
       if(i<0) ko.push(rec); else ko[i]=rec;
     }
   });
-  next.groupResults=gr; next.ko=ko;
+
+  // Store latest result date per team (for history event timestamps)
+  const matchDates={...(prev.matchDates||{})};
+  (p.results||[]).forEach(m=>{
+    if(m.date&&!m.live){
+      if(!matchDates[m.a]||m.date>matchDates[m.a]) matchDates[m.a]=m.date;
+      if(!matchDates[m.b]||m.date>matchDates[m.b]) matchDates[m.b]=m.date;
+    }
+  });
+
+  // Diff prev vs next analysis to build history of eliminations / champion
+  const prevA=analyse(prev);
+  const nextTemp={...prev,groupResults:gr,ko,matchDates};
+  const nextA=analyse(nextTemp);
+  const history=[...(prev.history||[])];
+  const histKeys=new Set(history.map(h=>h.key));
+  const now=Date.now(); const nowIso=new Date(now).toISOString();
+
+  ALL_TEAMS.forEach(t=>{
+    if(!OWNER_OF[t]) return;
+    if(nextA.teamOut[t]&&!prevA.teamOut[t]){
+      const key=`team_out:${t}`;
+      if(!histKeys.has(key)){
+        const at=matchDates[t]||nowIso;
+        history.push({key,ts:now,at,type:"team_out",team:t,owner:OWNER_OF[t]});
+        histKeys.add(key);
+      }
+    }
+  });
+  OWNERS.forEach(o=>{
+    if(nextA.owner[o].out&&!prevA.owner[o].out){
+      const key=`player_out:${o}`;
+      if(!histKeys.has(key)){
+        const teamDates=nextA.owner[o].teams.map(t=>matchDates[t]).filter(Boolean);
+        const at=teamDates.length?teamDates.sort().reverse()[0]:nowIso;
+        history.push({key,ts:now,at,type:"player_out",owner:o});
+        histKeys.add(key);
+      }
+    }
+  });
+  if(nextA.champion&&!prevA.champion){
+    const key=`champion:${nextA.champion}`;
+    if(!histKeys.has(key)){
+      const at=matchDates[nextA.champion]||nowIso;
+      history.push({key,ts:now,at,type:"champion",team:nextA.champion,owner:OWNER_OF[nextA.champion]});
+      histKeys.add(key);
+    }
+  }
+
+  next.groupResults=gr; next.ko=ko; next.matchDates=matchDates; next.history=history;
   next.autoScorers=(p.scorers||[]).filter(s=>OWNER_OF[s.t]).slice(0,20);
   next.liveMatches=p.liveMatches||[]; next.liveCount=p.liveCount||0;
   next.nextScheduled=p.nextScheduled??null;
@@ -462,11 +519,9 @@ function analyse(state){
     O.p+=g.p+k.p;O.w+=g.w+k.w;O.d+=g.d+k.d;O.l+=g.l+k.l;O.gf+=g.gf+k.gf;O.ga+=g.ga+k.ga;O.teams.push(t); if(!teamOut[t])O.teamsLeft++;});
   OWNERS.forEach(o=>{const O=owner[o];O.gd=O.gf-O.ga;O.pts=O.w*3+O.d;O.out=O.teamsLeft===0;});
 
-  // champion: derived automatically once the Final has a result
   const finalMatch=ko.find(m=>m.round==="Final"&&m.hs!=null&&m.as!=null);
   const champion = finalMatch ? ((koWL(finalMatch)||{}).w || null) : null;
 
-  // live trophy odds: opening bookmaker price, adjusted for each team's form so far, re-normalised across survivors
   const teamForm=t=>{ const g=groupStats[t]||{}, k=koStats[t]||{};
     const gp=(g.p||0)+(k.p||0); if(!gp) return 1;
     const pts=(g.pts||0)+((k.w||0)*3+(k.d||0));
@@ -477,7 +532,6 @@ function analyse(state){
   OWNERS.forEach(o=>{ owner[o].odds=champion?(OWNER_OF[champion]===o?100:0):owner[o].teams.filter(t=>!teamOut[t]).reduce((s,t)=>s+w(t),0)/inTotal*100; });
   const ownerRanked=[...OWNERS].map(o=>owner[o]).sort((a,b)=>(a.out?1:0)-(b.out?1:0)||b.odds-a.odds||b.pts-a.pts||b.gd-a.gd);
 
-  // head-to-head: every clash between two pooled teams; a same-owner meeting attributes BOTH sides to that player
   const h2h={}; OWNERS.forEach(o=>h2h[o]={owner:o,p:0,w:0,d:0,l:0,gf:0,ga:0});
   clashes.forEach(c=>{const A=h2h[c.oa],B=h2h[c.ob]; if(!A||!B) return; A.p++;B.p++;A.gf+=c.ga;A.ga+=c.gb;B.gf+=c.gb;B.ga+=c.ga;
     let r; if(c.ga>c.gb)r="a"; else if(c.ga<c.gb)r="b"; else if(c.pens)r=c.pens[0]>c.pens[1]?"a":"b"; else r="d";
@@ -485,28 +539,78 @@ function analyse(state){
   OWNERS.forEach(o=>{const H=h2h[o];H.gd=H.gf-H.ga;H.pts=H.w*3+H.d;});
   const h2hRanked=[...OWNERS].map(o=>h2h[o]).sort((a,b)=>b.pts-a.pts||b.gd-a.gd||b.gf-a.gf||b.w-a.w);
 
-  // golden boot: auto + manual scorers
   const scMap=new Map();
   (state.autoScorers||[]).forEach(s=>{if(OWNER_OF[s.t])scMap.set(s.p+"|"+s.t,{p:s.p,t:s.t,g:s.g,src:"auto"});});
   (state.scorers||[]).forEach(s=>{if(OWNER_OF[s.t])scMap.set(s.p+"|"+s.t,{p:s.p,t:s.t,g:s.g,src:"manual"});});
   const scorers=[...scMap.values()].sort((a,b)=>b.g-a.g).slice(0,15);
 
-  // golden glove: clean sheets per team derived from all results
   const cs={}; ALL_TEAMS.forEach(t=>cs[t]=0);
   GROUP_LETTERS.forEach(L=>FIXTURES[L].forEach(fx=>{const r=results[fx.id]; if(r&&r.hs!=null){ if(r.as===0)cs[fx.a]++; if(r.hs===0)cs[fx.b]++; }}));
   ko.forEach(m=>{ if(m.hs!=null&&m.as!=null){ if(m.as===0)cs[m.a]++; if(m.hs===0)cs[m.b]++; }});
   const keeperName={}; (state.keepers||[]).forEach(k=>{if(OWNER_OF[k.t])keeperName[k.t]=k.p;});
   const cleanSheets=ALL_TEAMS.map(t=>({t,owner:OWNER_OF[t],cs:cs[t],keeper:keeperName[t]||null})).filter(x=>x.cs>0).sort((a,b)=>b.cs-a.cs||strength(b.t)-strength(a.t)).slice(0,15);
 
-  // team with most goals (assigned teams only)
   let goalsLeader=null, topGoals=-1;
   ALL_TEAMS.forEach(t=>{ if(!OWNER_OF[t]) return; const g=(groupStats[t]?.gf||0)+(koStats[t]?.gf||0);
     if(g>topGoals){ topGoals=g; goalsLeader={team:t,goals:g,owner:OWNER_OF[t]}; }
     else if(g===topGoals&&g>0&&goalsLeader&&(strength(t)>strength(goalsLeader.team)||(strength(t)===strength(goalsLeader.team)&&t<goalsLeader.team))){ goalsLeader={team:t,goals:g,owner:OWNER_OF[t]}; } });
 
+  // --- Extensions ---
+
+  // goalsBoard: all pooled teams ranked by total goals
+  const goalsBoard=ALL_TEAMS
+    .filter(t=>OWNER_OF[t])
+    .map(t=>({t,owner:OWNER_OF[t],goals:(groupStats[t]?.gf||0)+(koStats[t]?.gf||0)}))
+    .filter(x=>x.goals>0)
+    .sort((a,b)=>b.goals-a.goals||strength(b.t)-strength(a.t));
+
+  // firstOut: earliest player_out event from history
+  const firstOut=(state.history||[]).filter(h=>h.type==="player_out").sort((a,b)=>a.ts-b.ts)[0]||null;
+
+  // upsets: confirmed clashes where the winner had higher (worse) BASE_ODDS
+  const upsets=clashes
+    .filter(c=>!c.live)
+    .map(c=>{
+      const winTeam=c.ga>c.gb?c.a:c.ga<c.gb?c.b:(c.pens?(c.pens[0]>c.pens[1]?c.a:c.b):null);
+      if(!winTeam) return null;
+      const loseTeam=winTeam===c.a?c.b:c.a;
+      const winOdds=BASE_ODDS[winTeam]||1500, loseOdds=BASE_ODDS[loseTeam]||1500;
+      if(loseOdds>=winOdds*1.5) return null; // winner was not a meaningful underdog
+      return {stage:c.stage,winner:winTeam,loser:loseTeam,winOwner:OWNER_OF[winTeam]||null,loseOwner:OWNER_OF[loseTeam]||null,
+        ga:c.ga,gb:c.gb,pens:c.pens,winOdds,loseOdds,ratio:winOdds/loseOdds};
+    })
+    .filter(Boolean)
+    .sort((a,b)=>b.ratio-a.ratio);
+
+  // drawLuck: per-owner portfolio strength from opening odds
+  const drawLuck=OWNERS.map(o=>{
+    const teams=owner[o].teams;
+    const ownerStr=teams.reduce((s,t)=>s+strength(t),0);
+    return {owner:o,strength:ownerStr,teams};
+  }).sort((a,b)=>b.strength-a.strength);
+
+  // groupAwards: top group performers from completed groups
+  const groupWinners=GROUP_LETTERS
+    .filter(L=>complete[L])
+    .map(L=>{ const s=standings[L][0]; return s&&OWNER_OF[s.name]?{team:s.name,owner:OWNER_OF[s.name],L,pts:s.pts,gf:s.gf,gd:s.gd}:null; })
+    .filter(Boolean)
+    .sort((a,b)=>b.pts-a.pts||b.gd-a.gd||b.gf-a.gf);
+  const groupAwards={groupWinners};
+
+  // penaltyBoard: KO clashes decided on pens, by owner
+  const penMap={}; OWNERS.forEach(o=>penMap[o]={owner:o,pw:0,pl:0});
+  clashes.forEach(c=>{
+    if(!c.pens||c.live) return;
+    const [pa,pb]=c.pens; if(pa===pb) return;
+    const penWin=pa>pb?c.oa:c.ob, penLose=pa>pb?c.ob:c.oa;
+    if(penMap[penWin]) penMap[penWin].pw++;
+    if(penMap[penLose]) penMap[penLose].pl++;
+  });
+  const penaltyBoard=OWNERS.map(o=>penMap[o]).filter(o=>o.pw+o.pl>0).sort((a,b)=>b.pw-a.pw||a.pl-b.pl);
+
   return { standings,complete,allComplete,teamOut,owner,ownerRanked,champion,h2hRanked,
     clashes:clashes.slice().reverse(), scorers, cleanSheets, bootLeader:scorers[0]||null, gloveLeader:cleanSheets[0]||null,
-    goalsLeader:topGoals>0?goalsLeader:null };
+    goalsLeader:topGoals>0?goalsLeader:null, goalsBoard, firstOut, upsets, drawLuck, groupAwards, penaltyBoard };
 }
 
 /* ============================================================ VIEWS ============================================================ */
@@ -543,36 +647,42 @@ function SyncBar({state,syncing,onSync,compact}){
   );
 }
 
-function WcWidgets({standing,teamsLeft,leader,goalsLeader,lastPlayer}){
+function WcWidgets({standing,teamsLeft,leader,goalsLeader,firstOut,ownerRanked}){
+  const atRisk=ownerRanked.filter(o=>!o.out).sort((a,b)=>a.teamsLeft-b.teamsLeft||a.odds-b.odds)[0];
   return (
     <div className="wc-widgets">
       <div className="wc-widget wc-card">
-        <span className="wc-widget-icon" aria-hidden="true">👥</span>
+        <span className="wc-widget-icon">👥</span>
         <span className="wc-widget-val">{standing}</span>
         <span className="wc-widget-lbl">Players still in</span>
       </div>
       <div className="wc-widget wc-card">
-        <span className="wc-widget-icon" aria-hidden="true">⚽</span>
+        <span className="wc-widget-icon">⚽</span>
         <span className="wc-widget-val">{teamsLeft}</span>
         <span className="wc-widget-lbl">Teams in the cup</span>
       </div>
       <div className="wc-widget wc-card">
-        <span className="wc-widget-icon" aria-hidden="true">🏆</span>
+        <span className="wc-widget-icon">🏆</span>
         <span className="wc-widget-lbl">Current leader</span>
         <span className="wc-widget-row"><Crest owner={leader.owner} size={24}/><b style={{color:OWNER_COLOR[leader.owner]}}>{leader.owner}</b></span>
       </div>
       <div className="wc-widget wc-card">
-        <span className="wc-widget-icon" aria-hidden="true">🥅</span>
+        <span className="wc-widget-icon">🥅</span>
         <span className="wc-widget-lbl">Most goals</span>
         {goalsLeader ? (
           <span className="wc-widget-row"><FlagDot team={goalsLeader.team}/><b>{goalsLeader.team}</b><span className="wc-widget-muted">{goalsLeader.goals} · {goalsLeader.owner}</span></span>
         ) : <span className="wc-widget-muted">No goals yet</span>}
       </div>
       <div className="wc-widget wc-widget--wide wc-card">
-        <span className="wc-widget-icon" aria-hidden="true">🍻</span>
-        <span className="wc-widget-lbl">Booze bet — last place get a drink from winner</span>
+        <span className="wc-widget-icon">🍻</span>
+        <span className="wc-widget-lbl">Booze bet — first eliminated wins a drink from the cup winner</span>
         <span className="wc-widget-row wc-widget-muted">
-          {leader.owner===lastPlayer.owner ? "Everyone still in it" : <><span style={{color:OWNER_COLOR[leader.owner]}}>{leader.owner}</span><span className="wc-arrow">→</span><span style={{color:OWNER_COLOR[lastPlayer.owner]}}>{lastPlayer.owner}</span></>}
+          {firstOut
+            ? <><Crest owner={firstOut.owner} size={18}/><span style={{color:OWNER_COLOR[firstOut.owner]}}>{firstOut.owner}</span><span className="wc-widget-muted">wins it — all teams out!</span></>
+            : atRisk
+              ? <><span className="wc-widget-muted">Nobody out yet ·</span><span style={{color:OWNER_COLOR[atRisk.owner]}}>{atRisk.owner}</span><span className="wc-widget-muted">most at risk ({atRisk.teamsLeft} team{atRisk.teamsLeft!==1?"s":""} left)</span></>
+              : <span>Nobody eliminated yet</span>
+          }
         </span>
       </div>
     </div>
@@ -798,12 +908,24 @@ function KoCard({m,liveMatchMap}){ const wl=koWL(m); const isLive=m.src==="live"
   </div>);
 }
 
-function AwardsView({A}){
+/* ============================================================ PRIZES TAB ============================================================ */
+function PrizesView({A,state}){
   const champ=A.champion, champO=champ?OWNER_OF[champ]:null;
   return (
-    <div style={{display:"grid",gap:16}} className="wc-stack">
-      <ScorerBoard A={A}/>
-      <GloveBoard A={A}/>
+    <div className="wc-stack">
+      <div className="wc-prize-board">
+        <PrizeSlot icon="🏆" label="Cup Winner" prize="Bragging rights — wins the sweepstake"
+          holder={champO} team={champ} empty="Decided in the Final"/>
+        <PrizeSlot icon="🥈" label="Most Goals" prize="Second place — team with most goals in the tournament"
+          holder={A.goalsLeader?.owner} team={A.goalsLeader?.team} extra={A.goalsLeader?`${A.goalsLeader.goals} goals so far`:null} empty="No goals yet"/>
+        <PrizeSlot icon="🍻" label="First Eliminated" prize="Wins a drink from the cup winner"
+          holder={A.firstOut?.owner} team={null}
+          extra={A.firstOut?"All 3 teams eliminated":null}
+          empty={(() => { const r=A.ownerRanked.filter(o=>!o.out).sort((a,b)=>a.teamsLeft-b.teamsLeft)[0]; return r?`${r.owner} most at risk (${r.teamsLeft} teams)`:"Everyone still alive"; })()}/>
+      </div>
+
+      <GoalsBoard A={A}/>
+      <EliminationTimeline state={state} A={A}/>
 
       <div className="wc-card wc-pad">
         <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -815,13 +937,451 @@ function AwardsView({A}){
       </div>
 
       <div className="wc-card wc-pad">
-        <div className="display wc-card-title" style={{marginBottom:4}}>Trophy odds</div>
+        <div className="display wc-card-title" style={{marginBottom:4}}>Trophy Odds</div>
         <p className="wc-muted-sm" style={{marginBottom:10}}>Chance the winner comes from each player's surviving teams — bookmaker prices, adjusted live.</p>
         {A.ownerRanked.map(O=>(<div key={O.owner} className="wc-odds-row" style={{opacity:O.out?.5:1}}>
           <Crest owner={O.owner} size={20}/><span className="wc-odds-name">{O.owner}</span>
           <div className="wc-bar"><div className="wc-bar-fill" style={{width:`${Math.min(100,O.odds)}%`}}/></div>
           <span className="wc-odds-pct">{O.odds.toFixed(1)}%</span></div>))}
       </div>
+    </div>
+  );
+}
+
+function PrizeSlot({icon,label,prize,holder,team,extra,empty}){
+  return (
+    <div className={"wc-prize-slot wc-card"+(holder?" is-won":"")}>
+      <div className="wc-prize-top">
+        <span className="wc-prize-icon">{icon}</span>
+        <div className="wc-prize-text">
+          <div className="wc-prize-label display">{label}</div>
+          <div className="wc-muted-sm">{prize}</div>
+        </div>
+      </div>
+      <div className="wc-prize-holder">
+        {holder ? (
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <Crest owner={holder} size={36}/>
+            <div>
+              <div style={{font:"700 17px 'DM Sans',sans-serif",color:"var(--text)"}}>{holder}</div>
+              {team&&<div className="wc-muted-sm"><FlagDot team={team}/> {team}</div>}
+              {extra&&<div className="wc-muted-sm">{extra}</div>}
+            </div>
+          </div>
+        ) : (
+          <span className="wc-muted-sm" style={{fontStyle:"italic"}}>{empty}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function GoalsBoard({A}){
+  return (
+    <div className="wc-card wc-pad">
+      <BoardHead emoji="🥈" title="2nd Place Race" sub="Team with most goals wins second place"/>
+      {A.goalsBoard.length===0 && <p className="wc-muted-sm">No goals recorded yet.</p>}
+      <div className="wc-list">{A.goalsBoard.slice(0,12).map((x,i)=>(
+        <div key={x.t} className="wc-list-row">
+          <span className="wc-list-rank">{i+1}</span>
+          <span className="wc-list-team"><FlagDot team={x.t}/><b>{x.t}</b></span>
+          <span className="owntag" style={{color:OWNER_COLOR[x.owner]}}>{x.owner}</span>
+          <span className="wc-list-val">{x.goals}</span>
+        </div>
+      ))}</div>
+    </div>
+  );
+}
+
+function EliminationTimeline({state,A}){
+  const history=(state.history||[]).slice().sort((a,b)=>b.ts-a.ts);
+  return (
+    <div className="wc-card wc-pad">
+      <BoardHead emoji="⏱" title="Timeline" sub="Eliminations and milestones — logged as they happen"/>
+      {history.length===0 && (
+        <>
+          <p className="wc-muted-sm" style={{marginBottom:12}}>History accrues from this point forward. Most at risk right now:</p>
+          {A.ownerRanked.filter(o=>!o.out).sort((a,b)=>a.teamsLeft-b.teamsLeft).slice(0,3).map(o=>(
+            <div key={o.owner} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderTop:"1px solid var(--line)"}}>
+              <Crest owner={o.owner} size={22}/>
+              <span style={{font:"600 14px 'DM Sans',sans-serif",color:"var(--text)"}}>{o.owner}</span>
+              <span className="wc-muted-sm">{o.teamsLeft} team{o.teamsLeft!==1?"s":""} left</span>
+            </div>
+          ))}
+        </>
+      )}
+      <div className="wc-timeline">
+        {history.map(h=>(
+          <div key={h.key} className={"wc-timeline-row wc-timeline-row--"+h.type}>
+            <div className="wc-timeline-dot"/>
+            <div className="wc-timeline-body">
+              <div className="wc-timeline-text">
+                {h.type==="team_out"&&<><FlagDot team={h.team}/> <b>{h.team}</b> eliminated · <span className="owntag" style={{color:OWNER_COLOR[h.owner]}}>{h.owner}</span></>}
+                {h.type==="player_out"&&<><Crest owner={h.owner} size={18}/> <b>{h.owner}</b> — all teams out · wins the booze bet!</>}
+                {h.type==="champion"&&<><FlagDot team={h.team}/> <b>{h.team}</b> are World Champions! <span className="owntag" style={{color:OWNER_COLOR[h.owner]}}>{h.owner}</span> wins the sweepstake!</>}
+              </div>
+              {h.at&&<div className="wc-muted-sm">{fmtHistDate(h.at)}</div>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================ MY TEAMS TAB ============================================================ */
+function MyTeamsView({A,state,me,setMe,liveTeams,liveMatchMap}){
+  const [viewAs,setViewAs]=useState(me||"");
+  useEffect(()=>{ if(me&&!viewAs) setViewAs(me); },[me]);
+
+  const pickPermanently=(o)=>{ setMe(o); setViewAs(o); };
+  const currentPlayer=viewAs||me;
+
+  if(!currentPlayer){
+    return (
+      <div className="wc-myteams-pick">
+        <p className="section-note">Who are you in this sweepstake? Pick your name to see your teams, schedule and personal stats.</p>
+        <div className="wc-player-grid">
+          {OWNERS.map(o=>(
+            <button key={o} className="wc-player-pick-btn wc-card" onClick={()=>pickPermanently(o)}
+              style={{"--pc":OWNER_COLOR[o]}}>
+              <Crest owner={o} size={32}/>
+              <span style={{font:"600 14px 'DM Sans',sans-serif",color:"var(--text)"}}>{o}</span>
+              <span className="wc-muted-sm" style={{fontSize:11}}>{A.owner[o].teamsLeft}/{A.owner[o].teams.length} alive</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  const O=A.owner[currentPlayer];
+  const h2hData=A.h2hRanked.find(x=>x.owner===currentPlayer)||{pts:0,w:0,d:0,l:0};
+  const oddsRank=A.ownerRanked.findIndex(x=>x.owner===currentPlayer)+1;
+  const h2hRank=A.h2hRanked.findIndex(x=>x.owner===currentPlayer)+1;
+  const myTeams=O.teams;
+  const liveNow=(state.liveMatches||[]).filter(m=>myTeams.includes(m.a)||myTeams.includes(m.b));
+  const nextMyTeam=state.nextScheduled&&(myTeams.includes(state.nextScheduled.a)||myTeams.includes(state.nextScheduled.b))?state.nextScheduled:null;
+  const myClashes=A.clashes.filter(c=>myTeams.includes(c.a)||myTeams.includes(c.b)).slice(0,8);
+
+  return (
+    <div className="wc-stack">
+      <div className="wc-card wc-pad">
+        <div className="wc-myteams-who">
+          <Crest owner={currentPlayer} size={48}/>
+          <div style={{flex:1}}>
+            <div style={{font:"700 22px 'DM Sans',sans-serif",color:"var(--text)",lineHeight:1.2}}>{currentPlayer}</div>
+            <div className="wc-muted-sm" style={{marginTop:4}}>Rank #{oddsRank} · {O.teamsLeft}/{O.teams.length} teams alive</div>
+          </div>
+          <button className="btn-soft" onClick={()=>setViewAs("")}>Change</button>
+        </div>
+        <div className="wc-myteams-stats">
+          <div className="wc-myteams-stat">
+            <span className="wc-widget-val">{O.odds.toFixed(1)}%</span>
+            <span className="wc-widget-lbl">Trophy odds</span>
+          </div>
+          <div className="wc-myteams-stat">
+            <span className="wc-widget-val">#{oddsRank}</span>
+            <span className="wc-widget-lbl">Odds rank</span>
+          </div>
+          <div className="wc-myteams-stat">
+            <span className="wc-widget-val">{h2hData.pts}</span>
+            <span className="wc-widget-lbl">H2H pts</span>
+          </div>
+          <div className="wc-myteams-stat">
+            <span className="wc-widget-val">#{h2hRank}</span>
+            <span className="wc-widget-lbl">H2H rank</span>
+          </div>
+        </div>
+      </div>
+
+      <h2 className="section-title">Your teams</h2>
+      <div className="wc-stack">
+        {myTeams.map(t=>{
+          const L=GROUP_OF[t]; const st=A.standings[L].find(s=>s.name===t);
+          const out=A.teamOut[t]; const isLive=liveTeams?.has(t);
+          const liveScore=(state.liveMatches||[]).find(m=>m.a===t||m.b===t);
+          return (
+            <div key={t} className={"wc-card wc-pad"+(out?" is-out":"")} style={{opacity:out?.55:1}}>
+              <div style={{display:"flex",alignItems:"center",gap:12}}>
+                <FlagDot team={t}/>
+                <div style={{flex:1}}>
+                  <div style={{font:"700 16px 'DM Sans',sans-serif",color:out?"var(--muted)":"var(--text)"}}>{t}</div>
+                  <div className="wc-muted-sm">Group {L} · Rank {st?.rank||"?"} · {st?.pts||0} pts · {st?.gf||0} goals</div>
+                </div>
+                {isLive&&liveScore&&<span className="wc-live-score" style={{fontSize:13,flex:"none"}}><strong style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:18,color:"var(--gold)"}}>{liveScore.ga}–{liveScore.gb}</strong></span>}
+                {isLive&&<span className="wc-live-badge">Live</span>}
+                {!isLive&&out&&<span className="wc-pill wc-pill--out">Out</span>}
+                {!isLive&&!out&&<span className="wc-pill wc-pill--in">In</span>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {liveNow.length>0&&<><h2 className="section-title">Playing now</h2><LiveBar matches={liveNow}/></>}
+      {nextMyTeam&&<><h2 className="section-title">Next up today</h2><NextMatchBar match={nextMyTeam}/></>}
+
+      {myClashes.length>0&&<>
+        <h2 className="section-title">Recent results</h2>
+        <div className="wc-stack">{myClashes.map((c,i)=>{
+          const winTeam=!c.live?(c.ga>c.gb?c.a:c.ga<c.gb?c.b:(c.pens?(c.pens[0]>c.pens[1]?c.a:c.b):null)):null;
+          return (
+            <div key={i} className={"wc-card wc-match"+(c.live?" is-live":"")}>
+              <div className="wc-match-stage">{c.live&&<span className="wc-live-badge" style={{marginRight:6}}>Live</span>}{c.stage}</div>
+              <ClashSide team={c.a} owner={c.oa} score={c.ga} pen={c.pens?c.pens[0]:null} lose={winTeam&&winTeam!==c.a} lead={c.live&&c.ga>c.gb}/>
+              <div style={{height:1,background:"var(--line)",margin:"2px 0"}}/>
+              <ClashSide team={c.b} owner={c.ob} score={c.gb} pen={c.pens?c.pens[1]:null} lose={winTeam&&winTeam!==c.b} lead={c.live&&c.gb>c.ga}/>
+            </div>
+          );
+        })}</div>
+      </>}
+
+      <div style={{display:"flex",gap:10,flexWrap:"wrap",marginTop:4}}>
+        <span className="wc-muted-sm">Viewing as {currentPlayer}</span>
+        {currentPlayer!==me&&<button className="wc-link-btn" onClick={()=>setViewAs(me||"")}>Back to {me||"my teams"}</button>}
+        <button className="wc-link-btn" onClick={()=>setViewAs("")}>View another player</button>
+      </div>
+
+      <h2 className="section-title" style={{marginTop:8}}>Peek at another player</h2>
+      <div className="wc-player-grid wc-player-grid--compact">
+        {OWNERS.filter(o=>o!==currentPlayer).map(o=>(
+          <button key={o} className="wc-player-pick-btn wc-card" onClick={()=>setViewAs(o)}
+            style={{"--pc":OWNER_COLOR[o]}}>
+            <Crest owner={o} size={24}/>
+            <span style={{font:"600 13px 'DM Sans',sans-serif",color:"var(--text)"}}>{o}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================ DRAMA TAB ============================================================ */
+function DramaView({A,state}){
+  const [copied,setCopied]=useState(false);
+  const shareText=(o)=>{
+    const rank=A.ownerRanked.findIndex(x=>x.owner===o)+1;
+    const od=A.owner[o];
+    const h2h=A.h2hRanked.find(x=>x.owner===o);
+    return `${o} · #${rank} · ${od.odds.toFixed(1)}% trophy odds · ${od.teamsLeft}/${od.teams.length} teams alive · H2H: ${h2h?.w||0}W ${h2h?.d||0}D ${h2h?.l||0}L | TC Work Cup 2026`;
+  };
+  return (
+    <div className="wc-stack">
+      <div className="wc-card wc-pad">
+        <BoardHead emoji="⚡" title="Upset Log" sub="Underdogs beating the favourites"/>
+        {A.upsets.length===0&&<p className="wc-muted-sm">No upsets yet — the favourites are all winning so far.</p>}
+        <div className="wc-stack" style={{marginTop:A.upsets.length?12:0}}>
+          {A.upsets.map((u,i)=>(
+            <div key={i} className="wc-upset-card wc-card">
+              <div className="wc-upset-header">
+                <span className="wc-muted-sm">{u.stage}</span>
+                <span className="wc-pill wc-pill--upset">Upset ×{(u.winOdds/u.loseOdds).toFixed(0)}</span>
+              </div>
+              <div className="wc-upset-teams">
+                <div className="wc-upset-side">
+                  <FlagDot team={u.winner}/><b style={{color:"var(--text)"}}>{u.winner}</b>
+                  {u.winOwner&&<span className="owntag" style={{color:OWNER_COLOR[u.winOwner]}}>{u.winOwner}</span>}
+                  <span className="wc-muted-sm" style={{marginLeft:"auto",fontSize:11}}>({BASE_ODDS[u.winner]||"?"})</span>
+                </div>
+                <div className="wc-upset-score">{u.ga}–{u.gb}{u.pens?<span className="wc-muted-sm" style={{fontSize:11}}> ({u.pens[0]}–{u.pens[1]} pens)</span>:""}</div>
+                <div className="wc-upset-side wc-upset-side--lose">
+                  <FlagDot team={u.loser}/><span style={{color:"var(--muted)"}}>{u.loser}</span>
+                  {u.loseOwner&&<span className="owntag" style={{color:OWNER_COLOR[u.loseOwner],opacity:.7}}>{u.loseOwner}</span>}
+                  <span className="wc-muted-sm" style={{marginLeft:"auto",fontSize:11}}>({BASE_ODDS[u.loser]||"?"})</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="wc-card wc-pad">
+        <BoardHead emoji="🎲" title="Draw Luck" sub="Who drew the strongest portfolio at the start?"/>
+        <p className="wc-muted-sm" style={{marginBottom:14}}>Based on opening bookmaker prices. Top = strongest draw. Bottom = biggest longshots.</p>
+        <div className="wc-luck-list">
+          {A.drawLuck.map((d,i)=>(
+            <div key={d.owner} className="wc-luck-row">
+              <span className="wc-list-rank">{i+1}</span>
+              <Crest owner={d.owner} size={22}/>
+              <span style={{font:"600 14px 'DM Sans',sans-serif",color:"var(--text)",flex:1,minWidth:60}}>{d.owner}</span>
+              <div className="wc-luck-bar-wrap">
+                <div className="wc-luck-bar"><div className="wc-luck-fill" style={{width:`${(d.strength/A.drawLuck[0].strength)*100}%`}}/></div>
+              </div>
+              <span style={{font:"600 11px 'DM Sans',sans-serif",color:"var(--muted)",width:40,textAlign:"right",flexShrink:0}}>
+                {d.teams.map(t=>`${(1/strength(t)).toFixed(0)}`).join("/")}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="wc-card wc-pad">
+        <BoardHead emoji="👑" title="Bragging Rights" sub="Best moments involving pooled teams"/>
+        <BraggingRights A={A}/>
+      </div>
+
+      <div className="wc-card wc-pad">
+        <BoardHead emoji="📤" title="Share Your Stats" sub="Copy to paste in the team chat"/>
+        <div className="wc-share-grid">
+          {A.ownerRanked.map(O=>(
+            <button key={O.owner} className="wc-share-btn wc-card" onClick={()=>{
+              try{ navigator.clipboard.writeText(shareText(O.owner)).then(()=>{setCopied(O.owner);setTimeout(()=>setCopied(c=>c===O.owner?false:c),2000);}); }catch(e){}
+            }}>
+              <Crest owner={O.owner} size={26}/>
+              <span style={{flex:1,font:"600 13px 'DM Sans',sans-serif",color:"var(--text)",textAlign:"left"}}>{O.owner}</span>
+              <span className={"wc-share-copy"+(copied===O.owner?" is-copied":"")}>{copied===O.owner?"Copied!":"Copy"}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BraggingRights({A}){
+  const confirmed=A.clashes.filter(c=>!c.live);
+  const bigWin=confirmed.reduce((best,c)=>{
+    const m=Math.abs(c.ga-c.gb); if(m===0) return best;
+    if(!best||m>best.margin){ const winTeam=c.ga>c.gb?c.a:c.b;
+      return {winTeam,loseTeam:winTeam===c.a?c.b:c.a,margin:m,ga:c.ga,gb:c.gb,stage:c.stage,winOwner:OWNER_OF[winTeam]||null}; }
+    return best;
+  },null);
+  const goalFest=confirmed.reduce((best,c)=>{
+    const t=c.ga+c.gb; return(!best||t>best.t)?{a:c.a,b:c.b,ga:c.ga,gb:c.gb,t,stage:c.stage,oa:c.oa,ob:c.ob}:best;
+  },null);
+  if(!bigWin&&!goalFest) return <p className="wc-muted-sm">Check back once matches between pooled teams have been played.</p>;
+  return (
+    <div className="wc-brag-list">
+      {bigWin&&<div className="wc-brag-item">
+        <span className="wc-brag-icon">🎯</span>
+        <div>
+          <div style={{font:"600 14px 'DM Sans',sans-serif",color:"var(--text)"}}>Biggest win</div>
+          <div className="wc-muted-sm">
+            {bigWin.winOwner&&<span style={{color:OWNER_COLOR[bigWin.winOwner]}}>{bigWin.winOwner}</span>}
+            {bigWin.winOwner&&"'s "}<b>{bigWin.winTeam}</b> beat <b>{bigWin.loseTeam}</b> {Math.max(bigWin.ga,bigWin.gb)}–{Math.min(bigWin.ga,bigWin.gb)} · {bigWin.stage}
+          </div>
+        </div>
+      </div>}
+      {goalFest&&<div className="wc-brag-item">
+        <span className="wc-brag-icon">🔥</span>
+        <div>
+          <div style={{font:"600 14px 'DM Sans',sans-serif",color:"var(--text)"}}>Goal fest</div>
+          <div className="wc-muted-sm">
+            <FlagDot team={goalFest.a}/><b>{goalFest.a}</b> {goalFest.ga}–{goalFest.gb} <b>{goalFest.b}</b>
+            <FlagDot team={goalFest.b}/> ({goalFest.t} goals) · {goalFest.stage}
+          </div>
+        </div>
+      </div>}
+    </div>
+  );
+}
+
+/* ============================================================ STATS TAB ============================================================ */
+function StatsView({A,state}){
+  return (
+    <div className="wc-stack">
+      <ScorerBoard A={A}/>
+      <GloveBoard A={A}/>
+
+      <div className="wc-card wc-pad">
+        <BoardHead emoji="📊" title="Player Stats" sub="Combined record across all group and knockout matches"/>
+        <div className="wc-table-wrap" style={{marginTop:14}}>
+          <table className="lt">
+            <thead><tr>
+              <th style={{textAlign:"left",paddingLeft:14}}>Player</th>
+              <th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th><th className="sorted">Pts</th>
+            </tr></thead>
+            <tbody>{A.ownerRanked.map(O=>(
+              <tr key={O.owner} style={{opacity:O.out?.5:1}}>
+                <td style={{textAlign:"left",paddingLeft:14}}>
+                  <span style={{display:"inline-flex",alignItems:"center",gap:8}}>
+                    <Crest owner={O.owner} size={22}/><b style={{color:"var(--text)"}}>{O.owner}</b>
+                    {O.out&&<span className="wc-pill wc-pill--out" style={{marginLeft:4}}>Out</span>}
+                  </span>
+                </td>
+                <td>{O.p}</td><td>{O.w}</td><td>{O.d}</td><td>{O.l}</td>
+                <td>{O.gf}</td><td>{O.ga}</td><td>{O.gd>=0?"+":""}{O.gd}</td>
+                <td className="sorted"><b style={{color:"var(--text)"}}>{O.pts}</b></td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="wc-card wc-pad">
+        <BoardHead emoji="🛤" title="Path to Glory" sub="Surviving teams and their current stage"/>
+        <PathToGlory A={A} state={state}/>
+      </div>
+
+      <div className="wc-card wc-pad">
+        <BoardHead emoji="🏅" title="Group Stage Awards" sub="Best performers in the group phase"/>
+        <GroupAwards A={A}/>
+      </div>
+
+      {A.penaltyBoard.length>0&&<div className="wc-card wc-pad">
+        <BoardHead emoji="🥅" title="Penalty Corner" sub="Shootout record for pooled clashes"/>
+        <div className="wc-list">{A.penaltyBoard.map((o,i)=>(
+          <div key={o.owner} className="wc-list-row">
+            <span className="wc-list-rank">{i+1}</span>
+            <Crest owner={o.owner} size={22}/>
+            <span style={{font:"600 14px 'DM Sans',sans-serif",color:"var(--text)",flex:1}}>{o.owner}</span>
+            <span className="wc-muted-sm">{o.pw}W · {o.pl}L</span>
+          </div>
+        ))}</div>
+      </div>}
+    </div>
+  );
+}
+
+function PathToGlory({A,state}){
+  const alive=A.ownerRanked.filter(O=>!O.out);
+  if(!alive.length) return <p className="wc-muted-sm">Tournament complete.</p>;
+  return (
+    <div className="wc-path-list">
+      {alive.map(O=>(
+        <div key={O.owner} className="wc-path-row">
+          <Crest owner={O.owner} size={28}/>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{font:"600 14px 'DM Sans',sans-serif",color:"var(--text)",marginBottom:6}}>{O.owner}</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+              {O.teams.filter(t=>!A.teamOut[t]).map(t=>{
+                const koNext=(state.ko||[]).filter(m=>(m.a===t||m.b===t)&&m.hs==null)
+                  .sort((a,b)=>KO_ORDER.indexOf(a.round)-KO_ORDER.indexOf(b.round))[0];
+                const grp=GROUP_OF[t];
+                const stage=koNext?koNext.round:(A.complete[grp]?"Groups done":`Group ${grp}`);
+                return (
+                  <span key={t} className="wc-team-tag">
+                    <FlagDot team={t}/>{t}
+                    <span className="wc-muted-sm" style={{fontSize:10,marginLeft:2}}>· {stage}</span>
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function GroupAwards({A}){
+  const gw=A.groupAwards.groupWinners;
+  if(!gw.length) return <p className="wc-muted-sm">Group stage awards will appear as groups complete.</p>;
+  const medals=["🥇","🥈","🥉","4️⃣","5️⃣","6️⃣","7️⃣","8️⃣","9️⃣","🔟","#️⃣","#️⃣"];
+  return (
+    <div className="wc-brag-list" style={{marginTop:12}}>
+      {gw.map((g,i)=>(
+        <div key={g.team} className="wc-brag-item">
+          <span className="wc-brag-icon">{medals[i]||"·"}</span>
+          <div>
+            <div style={{font:"500 13px 'DM Sans',sans-serif",color:"var(--text)"}}>
+              <FlagDot team={g.team}/><b>{g.team}</b> topped Group {g.L} ({g.pts} pts, {g.gf} goals)
+              {g.owner&&<span> · <span className="owntag" style={{color:OWNER_COLOR[g.owner]}}>{g.owner}</span></span>}
+            </div>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -873,6 +1433,7 @@ function Crest({owner,size=28}){ return <span className="crest" style={{width:si
 function FlagDot({team}){ return <span className="flagdot" style={{background:OWNER_COLOR[OWNER_OF[team]]||"var(--muted)"}}/>; }
 function Shell({children}){ return <div className="wc-shell"><div className="wc-ambient" aria-hidden="true"/><div className="wc-wrap">{children}</div></div>; }
 function timeAgo(iso){ const s=(Date.now()-Date.parse(iso))/1000; if(s<60)return "just now"; if(s<3600)return Math.floor(s/60)+"m ago"; if(s<86400)return Math.floor(s/3600)+"h ago"; return Math.floor(s/86400)+"d ago"; }
+function fmtHistDate(iso){ if(!iso) return ""; const d=new Date(iso); const days=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"]; const months=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${days[d.getDay()]} ${d.getDate()} ${months[d.getMonth()]}`; }
 
 function Style(){ return <style>{`
   @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800;900&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap');
@@ -918,7 +1479,7 @@ function Style(){ return <style>{`
   .display{font-family:'Barlow Condensed','DM Sans',sans-serif;font-weight:700;letter-spacing:.01em;text-transform:uppercase}
   .loading-msg{padding:80px 20px;text-align:center;color:var(--muted)}
 
-  /* ── SIGNATURE: tricolor stripe ─────────────────────────────────────────── */
+  /* ── SIGNATURE ───────────────────────────────────────────────────────────── */
   .tc-stripe{display:flex;height:4px;width:44px;gap:3px;margin-bottom:14px}
   .tc-ca,.tc-mx,.tc-us{flex:1;border-radius:99px}
   .tc-ca{background:var(--red)}
@@ -926,7 +1487,6 @@ function Style(){ return <style>{`
   .tc-us{background:var(--navy)}
 
   /* ── HERO ───────────────────────────────────────────────────────────────── */
-  .wc-hosts{display:none}
   .wc-hero{padding:clamp(28px,5vw,48px) 0 clamp(22px,3.5vw,32px);margin-bottom:24px;border-bottom:1px solid var(--line)}
   .wc-hero-grid{display:flex;align-items:flex-start;justify-content:space-between;gap:20px}
   .wc-hero-copy{min-width:0;flex:1}
@@ -935,6 +1495,12 @@ function Style(){ return <style>{`
   .wc-title{margin:0 0 8px;font-family:'Barlow Condensed',sans-serif;font-size:clamp(48px,10vw,72px);font-weight:900;line-height:.96;color:var(--text);letter-spacing:-.01em;text-transform:uppercase}
   .wc-title-sub{color:var(--red);display:block}
   .wc-lead{margin:0;font:400 14px/1.6 'DM Sans',sans-serif;color:var(--muted)}
+
+  /* ── ME PICKER ──────────────────────────────────────────────────────────── */
+  .me-chip{display:flex;align-items:center;gap:6px;padding:5px 10px;border-radius:10px;background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow)}
+  .me-icon{font-size:13px;line-height:1}
+  .me-select{border:none;background:transparent;color:var(--text);font:600 12px 'DM Sans',sans-serif;cursor:pointer;padding:0;outline:none;max-width:110px}
+  .me-select:focus{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
 
   /* ── THEME TOGGLE ───────────────────────────────────────────────────────── */
   .theme-switch{display:flex;gap:3px;padding:3px;border-radius:10px;background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow)}
@@ -952,6 +1518,9 @@ function Style(){ return <style>{`
   .sync-btn{width:28px;height:28px;border:1px solid var(--line);border-radius:7px;background:var(--surface-2);color:var(--muted);font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.15s}
   .sync-btn:hover{color:var(--navy);border-color:var(--line-2)}
   .sync-btn:disabled{opacity:.4;cursor:default}
+  .btn-soft{border:1px solid var(--line);border-radius:8px;background:var(--surface-2);color:var(--muted);font:600 12px 'DM Sans',sans-serif;padding:7px 14px;cursor:pointer;transition:.15s;white-space:nowrap}
+  .btn-soft:hover{color:var(--text);border-color:var(--line-2)}
+  .wc-link-btn{background:none;border:none;padding:0;font:600 12px 'DM Sans',sans-serif;color:var(--accent);cursor:pointer;text-decoration:underline}
 
   /* ── LIVE BAR ───────────────────────────────────────────────────────────── */
   .wc-live{margin:0 0 16px;padding:10px 16px;border-radius:12px;border:1px solid color-mix(in srgb,var(--live) 22%,var(--line));background:var(--surface)}
@@ -983,7 +1552,7 @@ function Style(){ return <style>{`
   .wc-widget-muted{font:500 13px 'DM Sans',sans-serif;color:var(--muted)}
 
   /* ── TABS ───────────────────────────────────────────────────────────────── */
-  .wc-tabs{display:flex;gap:5px;margin-bottom:22px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+  .wc-tabs{display:flex;gap:5px;margin-bottom:22px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px;-webkit-overflow-scrolling:touch}
   .wc-tabs::-webkit-scrollbar{display:none}
   .wc-tab{flex:0 0 auto;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--muted);font:600 13px 'DM Sans',sans-serif;padding:9px 16px;cursor:pointer;white-space:nowrap;box-shadow:var(--shadow);transition:all .15s}
   .wc-tab:hover{color:var(--text);border-color:var(--line-2);background:var(--surface-2)}
@@ -1031,6 +1600,7 @@ function Style(){ return <style>{`
   .wc-pill--gold{color:var(--gold);background:var(--gold-soft)}
   .wc-pill--in{color:var(--qualify);background:color-mix(in srgb,var(--qualify) 12%,transparent)}
   .wc-pill--out{color:var(--live);background:color-mix(in srgb,var(--live) 10%,transparent)}
+  .wc-pill--upset{color:var(--gold);background:var(--gold-soft);font-size:9px}
 
   /* ── SECTION LABELS ─────────────────────────────────────────────────────── */
   .section-note{font:500 13px/1.65 'DM Sans',sans-serif;color:var(--muted);margin:0 0 16px}
@@ -1067,7 +1637,7 @@ function Style(){ return <style>{`
   .wc-match-stage{font:600 10px 'DM Sans',sans-serif;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
   .wc-match-foot{font:600 12px 'DM Sans',sans-serif;color:var(--muted);margin-top:8px;text-align:right}
 
-  /* ── AWARDS ─────────────────────────────────────────────────────────────── */
+  /* ── AWARDS/BOARDS ──────────────────────────────────────────────────────── */
   .wc-board-head{display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap}
   .wc-board-icon{font-size:20px;line-height:1}
   .wc-board-holder{margin-left:auto;text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:2px}
@@ -1103,7 +1673,6 @@ function Style(){ return <style>{`
   .wc-provisional-note{font:500 12px 'DM Sans',sans-serif;color:var(--live);background:color-mix(in srgb,var(--live) 8%,transparent);border:1px solid color-mix(in srgb,var(--live) 18%,transparent);border-radius:8px;padding:8px 12px;margin:0 0 14px;display:flex;align-items:center;gap:6px}
   .wc-provisional-note::before{content:"●";font-size:7px;animation:wcBlink 1.1s ease-in-out infinite;flex-shrink:0}
   .wc-prev{font:500 11px 'DM Sans',sans-serif;color:var(--muted);margin-left:4px}
-  .wc-prev::before{content:""}
   .wc-rank-delta{font:700 10px 'DM Sans',sans-serif;line-height:1;padding:2px 4px;border-radius:3px}
   .wc-rank-delta--up{color:var(--qualify);background:color-mix(in srgb,var(--qualify) 10%,transparent)}
   .wc-rank-delta--down{color:var(--live);background:color-mix(in srgb,var(--live) 10%,transparent)}
@@ -1126,19 +1695,80 @@ function Style(){ return <style>{`
   .wc-fixture-meta{display:flex;align-items:center;gap:4px;justify-content:flex-end;white-space:nowrap}
   .wc-fixture-clock{font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:700;color:var(--live)}
 
+  /* ── PRIZES ─────────────────────────────────────────────────────────────── */
+  .wc-prize-board{display:grid;gap:10px}
+  .wc-prize-slot{padding:18px 20px;transition:box-shadow .2s}
+  .wc-prize-slot.is-won{border-color:color-mix(in srgb,var(--gold) 30%,var(--line));background:linear-gradient(160deg,color-mix(in srgb,var(--gold-soft) 40%,var(--surface)) 0%,var(--surface) 100%)}
+  .wc-prize-top{display:flex;align-items:flex-start;gap:12px;margin-bottom:14px}
+  .wc-prize-icon{font-size:26px;line-height:1;flex-shrink:0;margin-top:2px}
+  .wc-prize-text{flex:1}
+  .wc-prize-label{font-size:16px;margin-bottom:2px}
+  .wc-prize-holder{display:flex;align-items:center}
+
+  /* ── TIMELINE ───────────────────────────────────────────────────────────── */
+  .wc-timeline{display:grid;gap:0;margin-top:12px}
+  .wc-timeline-row{display:flex;gap:12px;padding:10px 0;border-top:1px solid var(--line)}
+  .wc-timeline-row:first-child{border-top:none;padding-top:0}
+  .wc-timeline-dot{width:8px;height:8px;border-radius:50%;margin-top:5px;flex-shrink:0;background:var(--muted)}
+  .wc-timeline-row--player_out .wc-timeline-dot{background:var(--gold)}
+  .wc-timeline-row--champion .wc-timeline-dot{background:var(--qualify);width:10px;height:10px;margin-top:4px}
+  .wc-timeline-row--team_out .wc-timeline-dot{background:var(--live)}
+  .wc-timeline-body{flex:1;min-width:0}
+  .wc-timeline-text{font:500 13px 'DM Sans',sans-serif;color:var(--text);display:flex;align-items:center;gap:5px;flex-wrap:wrap;line-height:1.5}
+
+  /* ── MY TEAMS ───────────────────────────────────────────────────────────── */
+  .wc-myteams-pick{padding:8px 0}
+  .wc-player-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-top:12px}
+  .wc-player-grid--compact{grid-template-columns:repeat(auto-fill,minmax(100px,1fr))}
+  .wc-player-pick-btn{padding:14px 12px;display:flex;flex-direction:column;align-items:center;gap:8px;cursor:pointer;border-radius:12px;border:2px solid var(--pc,var(--line));background:var(--surface);transition:all .15s;text-align:center}
+  .wc-player-pick-btn:hover{box-shadow:var(--shadow-hover);border-color:var(--pc,var(--line-2));transform:translateY(-1px)}
+  .wc-player-pick-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .wc-myteams-who{display:flex;align-items:center;gap:14px;margin-bottom:16px;flex-wrap:wrap}
+  .wc-myteams-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding-top:14px;border-top:1px solid var(--line)}
+  .wc-myteams-stat{display:flex;flex-direction:column;gap:4px;text-align:center}
+
+  /* ── DRAMA ──────────────────────────────────────────────────────────────── */
+  .wc-upset-card{padding:14px 18px}
+  .wc-upset-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+  .wc-upset-teams{display:grid;gap:4px}
+  .wc-upset-side{display:flex;align-items:center;gap:8px;font:500 13px 'DM Sans',sans-serif;color:var(--text)}
+  .wc-upset-side--lose{opacity:.55}
+  .wc-upset-score{font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:800;color:var(--gold);padding:4px 0;text-align:center}
+  .wc-luck-list{display:grid;gap:6px}
+  .wc-luck-row{display:flex;align-items:center;gap:10px}
+  .wc-luck-bar-wrap{flex:1;min-width:60px}
+  .wc-luck-bar{height:6px;background:var(--chip);border-radius:99px;overflow:hidden}
+  .wc-luck-fill{height:100%;background:linear-gradient(90deg,var(--navy),var(--red));border-radius:99px;transition:width .4s ease}
+  .wc-brag-list{display:grid;gap:12px;margin-top:4px}
+  .wc-brag-item{display:flex;gap:12px;align-items:flex-start}
+  .wc-brag-icon{font-size:20px;flex-shrink:0;line-height:1.3}
+  .wc-share-grid{display:grid;gap:6px;margin-top:12px}
+  .wc-share-btn{display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;border-radius:10px;border:1px solid var(--line);background:var(--surface-2);transition:.15s;text-align:left;width:100%}
+  .wc-share-btn:hover{box-shadow:var(--shadow-hover);border-color:var(--line-2)}
+  .wc-share-copy{font:600 11px 'DM Sans',sans-serif;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin-left:auto;transition:.15s}
+  .wc-share-copy.is-copied{color:var(--qualify)}
+
+  /* ── STATS ──────────────────────────────────────────────────────────────── */
+  .wc-path-list{display:grid;gap:14px;margin-top:4px}
+  .wc-path-row{display:flex;gap:14px;align-items:flex-start}
+
   /* ── RESPONSIVE ─────────────────────────────────────────────────────────── */
   @media (min-width:700px){
     .wc-widgets{grid-template-columns:repeat(4,1fr)}
     .wc-widget--wide{grid-column:span 4}
+    .wc-prize-board{grid-template-columns:repeat(3,1fr)}
+    .wc-myteams-stats{grid-template-columns:repeat(4,1fr)}
   }
   @media (max-width:640px){
     .wc-hero-grid{flex-direction:column}
     .wc-hero-tools{align-items:stretch;width:100%}
     .theme-switch{justify-content:center}
     .sync-chip{max-width:none}
+    .me-chip{justify-content:center}
     .wc-player-top{gap:10px}
     .wc-player-odds{width:100%;text-align:left;display:flex;align-items:baseline;gap:10px;padding-top:10px;border-top:1px solid var(--line)}
     .wc-odds-lbl{margin-left:auto}
+    .wc-myteams-stats{grid-template-columns:repeat(2,1fr)}
   }
   @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 `}</style>; }
