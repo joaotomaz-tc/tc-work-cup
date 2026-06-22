@@ -1,4 +1,4 @@
-const { useState, useEffect, useMemo, useRef, useCallback } = React;
+const { useState, useEffect, useMemo, useRef } = React;
 
 /* ============================================================
    TC WORK CUP 2026 — OFFICE SWEEPSTAKE TRACKER
@@ -125,6 +125,20 @@ const DEFAULT_STATE={ groupResults:SEED_RESULTS, ko:[], awards:{champion:null},
   lastSync:null, syncError:null, history:[], matchDates:{} };
 const hasStore = typeof window!=="undefined" && window.storage;
 
+async function loadPersistedState(){
+  if(!hasStore) return null;
+  let r;
+  try{ r=await window.storage.get(STATE_KEY,true); }catch(e){ return null; }
+  const raw=r&&r.value;
+  if(!raw) return null;
+  return {...DEFAULT_STATE,...JSON.parse(raw)};
+}
+
+async function writePersistedState(next){
+  if(!hasStore) return;
+  try{ await window.storage.set(STATE_KEY,JSON.stringify(next),true); }catch(e){}
+}
+
 const TABS=[
   ["leaderboard","Leaderboard"],["myteams","My Teams"],["groups","Groups"],
   ["knockouts","Knockouts"],["h2h","Head-to-head"],["prizes","Prizes"],
@@ -143,6 +157,20 @@ function selectTab(tab,setTab){
   if(location.hash!==next) location.hash=tab;
 }
 
+function useMutable(initial){
+  const ref=useRef(initial);
+  return {
+    get:()=>ref.current,
+    set:(next)=>{ref.current=next;},
+  };
+}
+
+function useLatestValue(value){
+  const cell=useMutable(value);
+  useEffect(()=>{ cell.set(value); },[value]);
+  return cell;
+}
+
 /* ============================================================ */
 function App(){
   const [state,setState]=useState(DEFAULT_STATE);
@@ -151,8 +179,7 @@ function App(){
   const [syncing,setSyncing]=useState(false);
   const [themePref,setThemePref]=useState(readThemePref);
   const [me,setMe]=useState(readMe);
-  const stateRef=useRef(state);
-  stateRef.current=state;
+  const stateRef=useLatestValue(state);
 
   useEffect(()=>{ applyTheme(themePref); try{localStorage.setItem(THEME_KEY,themePref);}catch(e){} },[themePref]);
   useEffect(()=>{ try{localStorage.setItem(ME_KEY,me);}catch(e){} },[me]);
@@ -170,56 +197,63 @@ function App(){
   },[themePref]);
 
   useEffect(()=>{(async()=>{
-    if(hasStore){
-      try{const r=await window.storage.get(STATE_KEY,true); if(r?.value) setState({...DEFAULT_STATE,...JSON.parse(r.value)});}catch(e){}
-    }
+    const persisted=await loadPersistedState();
+    if(persisted) setState(persisted);
     setLoaded(true);
   })();},[]);
 
-  const persistNow=useCallback(async(next)=>{ setState(next); if(hasStore){try{await window.storage.set(STATE_KEY,JSON.stringify(next),true);}catch(e){}} },[]);
+  const persistNow=async(next)=>{ setState(next); await writePersistedState(next); };
 
-  const liveRef=useRef(false);
-  const pollRef=useRef(null);
-  const syncBusy=useRef(false);
-  const lastFullRef=useRef(0);
-  const didSync=useRef(false);
+  const liveRef=useMutable(false);
+  const pollRef=useMutable(null);
+  const syncBusy=useMutable(false);
+  const lastFullRef=useMutable(0);
+  const didSync=useMutable(false);
 
-  const runSync=useCallback(async({manual=false,scope="full"}={})=>{
-    if(syncBusy.current&&!manual) return;
-    syncBusy.current=true;
+  async function runSync({manual=false,scope="full"}={}){
+    if(syncBusy.get()&&!manual) return;
+    syncBusy.set(true);
     if(manual) setSyncing(true);
-    try{
-      const payload=await fetchLive({scope});
-      let base=stateRef.current;
-      if(hasStore&&manual){try{const r=await window.storage.get(STATE_KEY,true); if(r?.value) base={...DEFAULT_STATE,...JSON.parse(r.value)};}catch(e){}}
-      liveRef.current=(payload.liveCount||0)>0;
-      if(scope==="full") lastFullRef.current=Date.now();
-      await persistNow(mergeLive(base,payload));
-    }catch(e){ if(manual) setState({...stateRef.current,syncError:String(e.message||e)}); }
-    finally{ syncBusy.current=false; if(manual) setSyncing(false); }
-  },[persistNow]);
+    const payload=await fetchLive({scope}).catch(e=>({__error:e}));
+    if(payload.__error){
+      if(manual) setState({...stateRef.get(),syncError:String(payload.__error.message||payload.__error)});
+      syncBusy.set(false);
+      if(manual) setSyncing(false);
+      return;
+    }
+    let base=stateRef.get();
+    if(manual){
+      const persisted=await loadPersistedState();
+      if(persisted) base=persisted;
+    }
+    liveRef.set((payload.liveCount||0)>0);
+    if(scope==="full") lastFullRef.set(Date.now());
+    await persistNow(mergeLive(base,payload));
+    syncBusy.set(false);
+    if(manual) setSyncing(false);
+  }
 
-  const doSync=useCallback(()=>runSync({manual:true,scope:"full"}),[runSync]);
+  const doSync=()=>runSync({manual:true,scope:"full"});
 
   useEffect(()=>{
     if(!loaded) return;
     let cancelled=false;
     const pollDelay=()=>{
-      if(document.hidden) return liveRef.current?30000:120000;
-      return liveRef.current?1000:60000;
+      if(document.hidden) return liveRef.get()?30000:120000;
+      return liveRef.get()?1000:60000;
     };
-    const schedule=()=>{ if(cancelled) return; if(pollRef.current) clearTimeout(pollRef.current); pollRef.current=setTimeout(tick,pollDelay()); };
+    const schedule=()=>{ if(cancelled) return; const t=pollRef.get(); if(t) clearTimeout(t); pollRef.set(setTimeout(tick,pollDelay())); };
     const tick=async()=>{
       if(cancelled) return;
-      const needFull=!lastFullRef.current||Date.now()-lastFullRef.current>3600000;
-      const scope=liveRef.current?"live":(needFull?"full":"live");
+      const needFull=!lastFullRef.get()||Date.now()-lastFullRef.get()>3600000;
+      const scope=liveRef.get()?"live":(needFull?"full":"live");
       await runSync({scope});
       if(!cancelled) schedule();
     };
     const onVis=()=>schedule();
-    (async()=>{ if(!didSync.current){ didSync.current=true; await runSync({manual:true,scope:"full"}); } if(!cancelled) schedule(); })();
+    (async()=>{ if(!didSync.get()){ didSync.set(true); await runSync({manual:true,scope:"full"}); } if(!cancelled) schedule(); })();
     document.addEventListener("visibilitychange",onVis);
-    return ()=>{ cancelled=true; clearTimeout(pollRef.current); document.removeEventListener("visibilitychange",onVis); };
+    return ()=>{ cancelled=true; clearTimeout(pollRef.get()); document.removeEventListener("visibilitychange",onVis); };
   },[loaded,runSync]);
 
   const {A,Aconf,liveActive,liveTeams}=useMemo(()=>{
