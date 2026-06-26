@@ -32,18 +32,18 @@ export function BestThirdsView({ A, Aconf, liveActive }) {
         </div>
 
         <div className="wc-table-wrap" style={{ borderLeft: 'none', borderRight: 'none', borderRadius: 0, margin: 0 }}>
-          <table className="grp">
+          <table className="grp wc-thirds-table">
             <thead>
               <tr>
                 <th></th>
                 <th style={{ textAlign: 'left' }}>Team</th>
                 <th>Grp</th>
-                <th>P</th>
-                <th>W</th>
-                <th>D</th>
-                <th>L</th>
-                <th>GF</th>
-                <th>GA</th>
+                <th className="col-minor">P</th>
+                <th className="col-minor">W</th>
+                <th className="col-minor">D</th>
+                <th className="col-minor">L</th>
+                <th className="col-minor">GF</th>
+                <th className="col-minor">GA</th>
                 <th>GD</th>
                 <th>Pts</th>
               </tr>
@@ -106,12 +106,12 @@ export function BestThirdsView({ A, Aconf, liveActive }) {
                     <td>
                       <GroupBadge letter={s.group} />
                     </td>
-                    <td>{s.p}</td>
-                    <td>{s.w}</td>
-                    <td>{s.d}</td>
-                    <td>{s.l}</td>
-                    <td>{s.gf}</td>
-                    <td>{s.ga}</td>
+                    <td className="col-minor">{s.p}</td>
+                    <td className="col-minor">{s.w}</td>
+                    <td className="col-minor">{s.d}</td>
+                    <td className="col-minor">{s.l}</td>
+                    <td className="col-minor">{s.gf}</td>
+                    <td className="col-minor">{s.ga}</td>
                     <td>{s.gd >= 0 ? '+' : ''}{s.gd}</td>
                     <td><b style={{ color: 'var(--text)' }}>{s.pts}</b></td>
                   </tr>
