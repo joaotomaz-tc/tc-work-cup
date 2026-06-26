@@ -396,11 +396,6 @@
   .wc-thirds-row--adv{background:color-mix(in srgb,var(--qualify) 13%,var(--surface))!important}
   .wc-thirds-row--adv:hover{background:color-mix(in srgb,var(--qualify) 18%,var(--surface))!important}
   .wc-thirds-cutoff>td{border-top:2px solid var(--qualify)!important}
-  /* On small screens hide P/W/D/L/GF/GA — show only Grp, GD, Pts */
-  @media(max-width:480px){
-    table.grp.wc-thirds-table{min-width:0}
-    table.grp.wc-thirds-table .col-minor{display:none}
-  }
 
   /* ── STATS ──────────────────────────────────────────────────────────────── */
   .wc-path-list{display:grid;gap:14px;margin-top:4px}
