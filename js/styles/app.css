@@ -392,6 +392,11 @@
   .wc-share-copy{font:600 11px 'DM Sans',sans-serif;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin-left:auto;transition:.15s}
   .wc-share-copy.is-copied{color:var(--qualify)}
 
+  /* ── BEST 3RDS ───────────────────────────────────────────────────────────── */
+  .wc-thirds-row--adv{background:color-mix(in srgb,var(--qualify) 13%,var(--surface))!important}
+  .wc-thirds-row--adv:hover{background:color-mix(in srgb,var(--qualify) 18%,var(--surface))!important}
+  .wc-thirds-cutoff>td{border-top:2px solid var(--qualify)!important}
+
   /* ── STATS ──────────────────────────────────────────────────────────────── */
   .wc-path-list{display:grid;gap:14px;margin-top:4px}
   .wc-path-row{display:flex;gap:14px;align-items:flex-start}
