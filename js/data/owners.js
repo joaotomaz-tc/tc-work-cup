@@ -10,18 +10,18 @@ export const OWNER_COLOR = {
 };
 
 export const OWNER_OF = {
-  "Uzbekistan":"Megan","Turkey":"Megan","Colombia":"Megan",
-  "South Africa":"Vicki","Jordan":"Vicki","Egypt":"Vicki",
+  "Uzbekistan":"Megan","Turkey":"Megan","Colombia":"Megan","Czechia":"Megan",
+  "South Africa":"Vicki","Jordan":"Vicki","Egypt":"Vicki","Norway":"Vicki",
   "Sweden":"Matt","Scotland":"Matt","Switzerland":"Matt",
   "United States":"Miles","Germany":"Miles","France":"Miles",
   "Morocco":"Graeme","Belgium":"Graeme","Japan":"Graeme",
   "Croatia":"Joao","Saudi Arabia":"Joao","Argentina":"Joao",
   "DR Congo":"Natalia","Uruguay":"Natalia","Brazil":"Natalia",
   "England":"Rebecca","Portugal":"Rebecca","Iran":"Rebecca",
-  "Curaçao":"Mike","Haiti":"Mike","Bosnia & Herzegovina":"Mike",
+  "Curaçao":"Mike","Haiti":"Mike","Bosnia & Herzegovina":"Mike","Iraq":"Mike",
   "Spain":"Alastair","Panama":"Alastair","Senegal":"Alastair",
   "Austria":"Parvathi","Netherlands":"Parvathi","New Zealand":"Parvathi",
-  "Cape Verde":"Alejandro","Ivory Coast":"Alejandro","Mexico":"Alejandro",
-  "Canada":"Kamela","South Korea":"Kamela","Australia":"Kamela",
-  "Paraguay":"Kat","Algeria":"Kat","Tunisia":"Kat",
+  "Cape Verde":"Alejandro","Ivory Coast":"Alejandro","Mexico":"Alejandro","Ghana":"Alejandro",
+  "Canada":"Kamela","South Korea":"Kamela","Australia":"Kamela","Ecuador":"Kamela",
+  "Paraguay":"Kat","Algeria":"Kat","Tunisia":"Kat","Qatar":"Kat",
 };

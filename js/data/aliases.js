@@ -3,6 +3,7 @@ import { ALL_TEAMS } from './tournament.js';
 export const ALIAS = {
   "türkiye":"Turkey","turkiye":"Turkey","turkey":"Turkey",
   "czech republic":"Czechia","czechia":"Czechia",
+  "ecuador":"Ecuador","equador":"Ecuador",
   "korea republic":"South Korea","south korea":"South Korea",
   "republic of korea":"South Korea","korea, republic of":"South Korea",
   "usa":"United States","united states":"United States",
