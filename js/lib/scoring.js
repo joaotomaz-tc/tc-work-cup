@@ -23,11 +23,17 @@ export function analyse(state) {
     standings[L].forEach(s => { rankOf[s.name] = s.rank; });
   });
   const allComplete = GROUP_LETTERS.every(L => complete[L]);
+
+  // FIFA 2026: best 8 of 12 third-place teams advance to R32.
+  // Tiebreakers: points → goal diff → goals scored → wins → strength (proxy for FIFA rank)
+  const thirdsRanked = GROUP_LETTERS.map(L => ({ ...standings[L][2], group: L }));
+  thirdsRanked.sort((a, b) =>
+    b.pts - a.pts || b.gd - a.gd || b.gf - a.gf ||
+    b.w - a.w || strength(b.name) - strength(a.name)
+  );
   let thirdAdv = new Set();
   if (allComplete) {
-    const th = GROUP_LETTERS.map(L => standings[L][2]);
-    th.sort((a, b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf || strength(b.name) - strength(a.name));
-    th.slice(0, 8).forEach(t => thirdAdv.add(t.name));
+    thirdsRanked.slice(0, 8).forEach(t => thirdAdv.add(t.name));
   }
 
   const koLosers = new Set();
@@ -207,7 +213,7 @@ export function analyse(state) {
   const penaltyBoard = OWNERS.map(o => penMap[o]).filter(o => o.pw + o.pl > 0).sort((a, b) => b.pw - a.pw || a.pl - b.pl);
 
   return {
-    standings, complete, allComplete, teamOut, owner, ownerRanked, champion, h2hRanked,
+    standings, complete, allComplete, teamOut, thirdsRanked, thirdAdv, owner, ownerRanked, champion, h2hRanked,
     clashes: clashes.slice().reverse(), scorers, cleanSheets,
     bootLeader: scorers[0] || null, gloveLeader: cleanSheets[0] || null,
     goalsLeader: topGoals > 0 ? goalsLeader : null, goalsBoard,

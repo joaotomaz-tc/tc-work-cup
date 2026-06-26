@@ -7,6 +7,7 @@ export const TABS = [
   ["leaderboard","Leaderboard"],
   ["myteams","My Teams"],
   ["groups","Groups"],
+  ["thirds","Best 3rds"],
   ["knockouts","Bracket"],
   ["h2h","Head-to-head"],
   ["prizes","Prizes"],

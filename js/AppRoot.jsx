@@ -23,6 +23,7 @@ import { PrizesView } from './components/views/PrizesView.jsx';
 import { MyTeamsView } from './components/views/MyTeamsView.jsx';
 import { DramaView } from './components/views/DramaView.jsx';
 import { StatsView } from './components/views/StatsView.jsx';
+import { BestThirdsView } from './components/views/BestThirdsView.jsx';
 import { GoalCelebration } from './components/ui/GoalCelebration.jsx';
 
 function readMe() {
@@ -193,6 +194,7 @@ export default function App() {
         {tab === "leaderboard" && <Leaderboard A={A} Aconf={Aconf} liveActive={liveActive} liveTeams={liveTeams}/>}
         {tab === "myteams"     && <MyTeamsView A={A} state={state} me={me} setMe={setMe} liveTeams={liveTeams} liveMatchMap={liveMatchMap}/>}
         {tab === "groups"      && <GroupsView A={A} Aconf={Aconf} state={state} liveTeams={liveTeams} liveMatchMap={liveMatchMap}/>}
+        {tab === "thirds"      && <BestThirdsView A={A} Aconf={Aconf} liveActive={liveActive}/>}
         {tab === "knockouts"   && <BracketView A={A} state={state} liveMatchMap={liveMatchMap}/>}
         {tab === "h2h"         && <HeadToHead A={A} Aconf={Aconf} liveActive={liveActive}/>}
         {tab === "prizes"      && <PrizesView A={A} state={state}/>}
