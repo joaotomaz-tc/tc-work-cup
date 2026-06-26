@@ -393,6 +393,10 @@
   .wc-share-copy.is-copied{color:var(--qualify)}
 
   /* ── BEST 3RDS ───────────────────────────────────────────────────────────── */
+  .wc-thirds-card{padding:16px 0 12px;overflow:hidden}
+  .wc-thirds-card .wc-thirds-head{padding-left:18px;padding-right:18px;margin-bottom:12px}
+  .wc-thirds-card .wc-thirds-legend{margin-bottom:0;margin-top:10px}
+  .wc-thirds-card .wc-table-wrap{border-left:none;border-right:none;border-radius:0;margin:0}
   .wc-thirds-row--adv{background:color-mix(in srgb,var(--qualify) 13%,var(--surface))!important}
   .wc-thirds-row--adv:hover{background:color-mix(in srgb,var(--qualify) 18%,var(--surface))!important}
   .wc-thirds-cutoff>td{border-top:2px solid var(--qualify)!important}

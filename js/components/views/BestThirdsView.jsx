@@ -16,8 +16,8 @@ export function BestThirdsView({ A, Aconf, liveActive }) {
     <div className="wc-stack">
       {liveActive && <ProvisionalBanner />}
 
-      <div className="wc-card">
-        <div className="wc-pad">
+      <div className="wc-card wc-thirds-card">
+        <div className="wc-thirds-head">
           <h2 className="wc-card-title" style={{ marginBottom: 8 }}>Best 3rd Places</h2>
           <p className="section-note" style={{ marginBottom: allComplete ? 0 : 10 }}>
             FIFA 2026 has 12 groups — the top 2 from each group (24 teams) plus the{' '}
@@ -31,7 +31,7 @@ export function BestThirdsView({ A, Aconf, liveActive }) {
           )}
         </div>
 
-        <div className="wc-table-wrap" style={{ borderLeft: 'none', borderRight: 'none', borderRadius: 0, margin: 0 }}>
+        <div className="wc-table-wrap">
           <table className="grp">
             <thead>
               <tr>
@@ -52,7 +52,6 @@ export function BestThirdsView({ A, Aconf, liveActive }) {
               {thirdsRanked.map((s, i) => {
                 const rank = i + 1;
                 const advances = rank <= ADVANCE_COUNT;
-                // Row 9 gets the cutoff border (first row that does NOT advance)
                 const isCutoff = rank === ADVANCE_COUNT + 1;
                 const confRank = confRankMap[s.name];
                 const rankChanged = liveActive && confRank != null && confRank !== rank;
@@ -69,10 +68,7 @@ export function BestThirdsView({ A, Aconf, liveActive }) {
                     style={{ opacity: out ? 0.5 : 1 }}
                   >
                     <td>
-                      <span
-                        className="rankdot"
-                        style={{ background: advances ? 'var(--qualify)' : 'var(--live)' }}
-                      >
+                      <span className="rankdot" style={{ background: advances ? 'var(--qualify)' : 'var(--live)' }}>
                         {rank}
                       </span>
                       {rankChanged && (
@@ -103,9 +99,7 @@ export function BestThirdsView({ A, Aconf, liveActive }) {
                         )}
                       </span>
                     </td>
-                    <td>
-                      <GroupBadge letter={s.group} />
-                    </td>
+                    <td><GroupBadge letter={s.group} /></td>
                     <td>{s.p}</td>
                     <td>{s.w}</td>
                     <td>{s.d}</td>
@@ -120,13 +114,15 @@ export function BestThirdsView({ A, Aconf, liveActive }) {
             </tbody>
           </table>
         </div>
-      </div>
 
-      <p className="wc-legend">
-        <i className="rankdot" style={{ background: 'var(--qualify)' }} /> Advances to R32 (best 8 of 12)
-        <i className="rankdot" style={{ background: 'var(--live)' }} /> Eliminated
-        {!allComplete && <span style={{ marginLeft: 2 }}>· Provisional until all groups complete</span>}
-      </p>
+        <div className="wc-thirds-head wc-thirds-legend">
+          <p className="wc-legend" style={{ margin: 0 }}>
+            <i className="rankdot" style={{ background: 'var(--qualify)' }} /> Advances to R32 (best 8 of 12)
+            <i className="rankdot" style={{ background: 'var(--live)' }} /> Eliminated
+            {!allComplete && <span style={{ marginLeft: 2 }}>· Provisional until all groups complete</span>}
+          </p>
+        </div>
+      </div>
     </div>
   );
 }
