@@ -9,7 +9,12 @@ export function LiveBar({ matches }) {
           <span className="wc-live-badge">Live</span>
           <span className="wc-live-stage">{m.stage}</span>
           <span className="wc-live-score">
-            <FlagDot team={m.a}/>{m.a} <strong>{m.ga}–{m.gb}</strong> <FlagDot team={m.b}/>{m.b}
+            <FlagDot team={m.a}/>{m.a}{" "}
+            <strong>{m.ga}–{m.gb}</strong>
+            {m.pa != null && m.pb != null && (
+              <span className="wc-live-pens"> ({m.pa}–{m.pb} pens)</span>
+            )}
+            {" "}<FlagDot team={m.b}/>{m.b}
           </span>
           {m.clock && <span className="wc-live-clock">{m.clock}</span>}
         </div>

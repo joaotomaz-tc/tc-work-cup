@@ -90,12 +90,25 @@ export default function App() {
   const didSync = useMutable(false);
 
   async function runSync({ manual = false, scope = "full" } = {}) {
-    if (syncBusy.get() && !manual) return;
+    if (syncBusy.get()) {
+      if (!manual) return;
+      // Manual sync: wait up to 2 s for the in-flight auto-poll to finish
+      // before proceeding, so they never merge against the same base state.
+      let waited = 0;
+      while (syncBusy.get() && waited < 2000) {
+        await new Promise(r => setTimeout(r, 50));
+        waited += 50;
+      }
+      if (syncBusy.get()) return;
+    }
     syncBusy.set(true);
     if (manual) setSyncing(true);
     const payload = await fetchLive({ scope }).catch(e => ({ __error: e }));
     if (payload.__error) {
-      if (manual) setState({ ...stateRef.get(), syncError: String(payload.__error.message || payload.__error) });
+      // Always surface sync errors — not just for manual clicks — so the UI
+      // reflects a degraded state instead of showing stale data silently.
+      const msg = String(payload.__error.message || payload.__error);
+      setState(prev => ({ ...prev, syncError: msg }));
       syncBusy.set(false);
       if (manual) setSyncing(false);
       return;
@@ -116,7 +129,9 @@ export default function App() {
     let cancelled = false;
     const pollDelay = () => {
       if (document.hidden) return liveRef.get() ? 30000 : 120000;
-      return liveRef.get() ? 1000 : 60000;
+      // 10 s during live matches — fast enough to catch goals within one polling
+      // cycle while being ~6× more polite to ESPN's unofficial API than 1 s.
+      return liveRef.get() ? 10000 : 60000;
     };
     const schedule = () => {
       if (cancelled) return;
@@ -204,7 +219,7 @@ export default function App() {
 
       <footer className="wc-foot">
         One link for the squad — everyone sees the same live standings.
-        <span className="wc-foot-note">Scores from ESPN · live matches update every second</span>
+        <span className="wc-foot-note">Scores from ESPN · live matches update every 10 seconds</span>
       </footer>
 
       {goalFlash > 0 && <GoalCelebration key={goalFlash} onDone={() => setGoalFlash(0)}/>}
