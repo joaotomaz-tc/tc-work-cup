@@ -25,5 +25,5 @@ export function Shell({ children }) {
 }
 
 export function ProvisionalBanner() {
-  return <p className="wc-provisional-note">Live — standings update every second and show where things stand right now.</p>;
+  return <p className="wc-provisional-note">Live — standings update every 10 seconds and show where things stand right now.</p>;
 }
