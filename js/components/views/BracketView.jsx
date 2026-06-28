@@ -1,8 +1,9 @@
 import { useRef, useState, useEffect } from 'react';
 import { OWNER_OF, OWNER_COLOR } from '../../data/owners.js';
 import { GROUP_OF, GROUP_LETTERS } from '../../data/tournament.js';
-import { R32_SLOTS, BRACKET_TREE, FEED_COLORS } from '../../data/bracket.js';
+import { R32_SLOTS, BRACKET_TREE, FEED_COLORS, KO_SCHEDULE } from '../../data/bracket.js';
 import { buildBracketTeams, koWL, getKoResult, slotLabel } from '../../lib/knockout.js';
+import { fmtFixtureWhen } from '../../lib/format.js';
 import { FlagDot } from '../ui/primitives.jsx';
 
 const FILTER_KEY = 'tc-work-cup:bracketFilter';
@@ -79,9 +80,16 @@ function BracketMatch({ teamA, teamB, slotA, slotB, matchId, ko, liveMatchMap })
   const wl = result ? koWL(result) : null;
   const isLive = result?.src === "live";
   const lm = isLive && teamA && teamB ? liveMatchMap[[teamA, teamB].sort().join("|")] : null;
+  const sched = !result && matchId ? KO_SCHEDULE[matchId] : null;
   return (
     <div className={"wc-bm"+(isLive?" is-live":"")}>
       {isLive && <div className="wc-bm-live-bar"><span className="wc-live-badge">Live</span>{lm?.clock && <span className="wc-fixture-clock" style={{ marginLeft:4 }}>{lm.clock}</span>}</div>}
+      {sched && (
+        <div className="wc-bm-schedule">
+          <span className="wc-bm-schedule-when">{fmtFixtureWhen(sched.start)}</span>
+          <span className="wc-bm-schedule-venue">{sched.venue}</span>
+        </div>
+      )}
       <BracketTeamRow team={teamA} score={result?result.hs:null} pen={result?.pa} winner={wl?.w===teamA} loser={wl?.l===teamA} isLive={isLive} slotDef={slotA} matchId={matchId} side="a"/>
       <div className="wc-bm-divider"/>
       <BracketTeamRow team={teamB} score={result?result.as:null} pen={result?.pb} winner={wl?.w===teamB} loser={wl?.l===teamB} isLive={isLive} slotDef={slotB} matchId={matchId} side="b"/>
@@ -165,7 +173,7 @@ export function BracketView({ A, state, liveMatchMap }) {
   const innerRef = useRef(null);
   const [lines, setLines] = useState([]);
   const [startRound, setStartRound] = useState(
-    () => localStorage.getItem(FILTER_KEY) || 'group'
+    () => localStorage.getItem(FILTER_KEY) || 'r32'
   );
 
   const ko = state.ko || [];

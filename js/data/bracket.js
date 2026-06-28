@@ -57,3 +57,46 @@ export const ALL_BRACKET = [
 
 // Colors for 1st (gold), 2nd (blue), 3rd (orange)
 export const FEED_COLORS = ["#eab308", "#38bdf8", "#f97316"];
+
+// Official 2026 FIFA World Cup knockout-stage schedule (all times UTC).
+// Venues use the FIFA-designated city/stadium names.
+export const KO_SCHEDULE = {
+  // Round of 32
+  m73: { start: "2026-06-28T19:00:00Z", venue: "SoFi Stadium · Los Angeles" },
+  m74: { start: "2026-06-29T17:00:00Z", venue: "Gillette Stadium · Boston" },
+  m75: { start: "2026-06-29T20:30:00Z", venue: "Estadio BBVA · Monterrey" },
+  m76: { start: "2026-06-30T01:00:00Z", venue: "NRG Stadium · Houston" },
+  m77: { start: "2026-06-30T17:00:00Z", venue: "MetLife Stadium · New York/NJ" },
+  m78: { start: "2026-06-30T21:00:00Z", venue: "AT&T Stadium · Dallas" },
+  m79: { start: "2026-07-01T01:00:00Z", venue: "Estadio Azteca · Mexico City" },
+  m80: { start: "2026-07-01T16:00:00Z", venue: "Mercedes-Benz Stadium · Atlanta" },
+  m81: { start: "2026-07-01T20:00:00Z", venue: "Levi's Stadium · San Francisco" },
+  m82: { start: "2026-07-02T00:00:00Z", venue: "Lumen Field · Seattle" },
+  m83: { start: "2026-07-02T19:00:00Z", venue: "BMO Field · Toronto" },
+  m84: { start: "2026-07-02T23:00:00Z", venue: "SoFi Stadium · Los Angeles" },
+  m85: { start: "2026-07-03T03:00:00Z", venue: "BC Place · Vancouver" },
+  m86: { start: "2026-07-03T18:00:00Z", venue: "Hard Rock Stadium · Miami" },
+  m87: { start: "2026-07-03T22:00:00Z", venue: "Arrowhead Stadium · Kansas City" },
+  m88: { start: "2026-07-04T01:30:00Z", venue: "AT&T Stadium · Dallas" },
+  // Round of 16
+  m89: { start: "2026-07-04T21:00:00Z", venue: "Lincoln Financial Field · Philadelphia" },
+  m90: { start: "2026-07-04T17:00:00Z", venue: "NRG Stadium · Houston" },
+  m91: { start: "2026-07-05T20:00:00Z", venue: "MetLife Stadium · New York/NJ" },
+  m92: { start: "2026-07-06T00:00:00Z", venue: "Estadio Azteca · Mexico City" },
+  m93: { start: "2026-07-06T19:00:00Z", venue: "AT&T Stadium · Dallas" },
+  m94: { start: "2026-07-07T00:00:00Z", venue: "Lumen Field · Seattle" },
+  m95: { start: "2026-07-07T16:00:00Z", venue: "Mercedes-Benz Stadium · Atlanta" },
+  m96: { start: "2026-07-07T20:00:00Z", venue: "BC Place · Vancouver" },
+  // Quarter-finals
+  m97:  { start: "2026-07-09T20:00:00Z", venue: "Gillette Stadium · Boston" },
+  m98:  { start: "2026-07-10T19:00:00Z", venue: "SoFi Stadium · Los Angeles" },
+  m99:  { start: "2026-07-11T21:00:00Z", venue: "Hard Rock Stadium · Miami" },
+  m100: { start: "2026-07-12T01:00:00Z", venue: "Arrowhead Stadium · Kansas City" },
+  // Semi-finals
+  m101: { start: "2026-07-14T19:00:00Z", venue: "AT&T Stadium · Dallas" },
+  m102: { start: "2026-07-15T19:00:00Z", venue: "Mercedes-Benz Stadium · Atlanta" },
+  // Third place
+  m103: { start: "2026-07-18T21:00:00Z", venue: "Hard Rock Stadium · Miami" },
+  // Final
+  m104: { start: "2026-07-19T19:00:00Z", venue: "MetLife Stadium · New York/NJ" },
+};

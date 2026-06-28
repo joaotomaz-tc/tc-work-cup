@@ -269,6 +269,9 @@
   .wc-bm-owner{font-size:11px!important;flex-shrink:0}
   .wc-bm-score{margin-left:auto;font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:700;color:var(--muted);flex-shrink:0;padding-left:6px}
   .wc-bm-divider{height:1px;background:var(--line);margin:3px 0}
+  .wc-bm-schedule{display:flex;flex-direction:column;gap:1px;margin-bottom:5px;padding-bottom:5px;border-bottom:1px solid var(--line)}
+  .wc-bm-schedule-when{font:600 10px 'DM Sans',sans-serif;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .wc-bm-schedule-venue{font:400 10px 'DM Sans',sans-serif;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
   .wc-clash-side{display:flex;align-items:center;gap:8px;padding:6px 0}
   .wc-clash-team{font:600 14px 'DM Sans',sans-serif;color:var(--text)}
