@@ -217,7 +217,7 @@
   /* ── BRACKET SCROLL SHELL ────────────────────────────────────────────────── */
   .wc-bracket-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:12px;margin:0 -4px}
   /* Inner row: groups col + gap + bracket columns, all same height */
-  /* min-height = SLOT_H(90) × 16 + label(≈26px) = 1466px */
+  /* min-height = SLOT_H(136) × 16 + label(≈26px) = 2202px */
   .wc-bracket-inner{display:inline-flex;align-items:stretch;position:relative;padding:4px;min-height:1466px}
   /* SVG overlay: absolute, covers the full inner area, pointer-events:none */
   .wc-connector-svg{position:absolute;top:0;left:0;width:100%;height:100%;overflow:visible;pointer-events:none;z-index:10}

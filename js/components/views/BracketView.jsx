@@ -98,8 +98,9 @@ function BracketMatch({ teamA, teamB, slotA, slotB, matchId, ko, liveMatchMap })
 }
 
 // Base height in px for one R32 slot. All later rounds are multiples of this.
-// Must be > card height (≈75px) + slot vertical padding (6px) = 81px minimum.
-const SLOT_H = 90;
+// Must be > card height + slot vertical padding (6px).
+// Card with schedule block ≈ 127px, so minimum is 133px; use 136 for breathing room.
+const SLOT_H = 136;
 
 function BracketCol({ label, matches, slotH, hasConnector, ko, liveMatchMap }) {
   return (
