@@ -5,6 +5,7 @@ export const DEFAULT_STATE = {
   scorers: [],
   keepers: [],
   autoScorers: [],
+  scorerEvents: {},
   odds: {},
   liveMatches: [],
   liveCount: 0,

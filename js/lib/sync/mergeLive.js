@@ -2,6 +2,7 @@ import { OWNERS, OWNER_OF } from '../../data/owners.js';
 import { ALL_TEAMS } from '../../data/tournament.js';
 import { FIXTURE_INDEX } from '../../data/fixtures.js';
 import { analyse } from '../scoring.js';
+import { aggregateScorerEvents, mergeScorerEvents } from './scorers.js';
 
 export function mergeLive(prev, p) {
   const next = { ...prev };
@@ -79,9 +80,21 @@ export function mergeLive(prev, p) {
   const fixtureSchedules = { ...(prev.fixtureSchedules || {}) };
   (p.fixtureSchedules || []).forEach(({ id, start }) => { fixtureSchedules[id] = start; });
 
+  const filteredByEvent = {};
+  Object.entries(p.scorersByEvent || {}).forEach(([eventId, list]) => {
+    filteredByEvent[eventId] = (list || []).filter(s => OWNER_OF[s.t]);
+  });
+  next.scorerEvents = mergeScorerEvents(prev.scorerEvents, filteredByEvent);
+  const autoScorers = aggregateScorerEvents(next.scorerEvents)
+    .filter(s => OWNER_OF[s.t])
+    .slice(0, 20);
+  // Legacy persisted state may lack scorerEvents until the next full sync rebuilds them.
+  next.autoScorers = Object.keys(next.scorerEvents).length || !prev.autoScorers?.length
+    ? autoScorers
+    : prev.autoScorers;
+
   next.groupResults = gr; next.ko = ko; next.matchDates = matchDates;
   next.history = history; next.fixtureSchedules = fixtureSchedules;
-  next.autoScorers = (p.scorers || []).filter(s => OWNER_OF[s.t]).slice(0, 20);
   next.liveMatches = p.liveMatches || []; next.liveCount = p.liveCount || 0;
   next.nextScheduled = p.nextScheduled ?? null;
   next.lastSync = new Date().toISOString(); next.syncError = null;
