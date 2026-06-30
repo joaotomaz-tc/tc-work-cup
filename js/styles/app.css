@@ -395,9 +395,12 @@
   .wc-upset-side{display:flex;align-items:center;gap:8px;font:500 13px 'DM Sans',sans-serif;color:var(--text)}
   .wc-upset-side--lose{opacity:.55}
   .wc-upset-score{font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:800;color:var(--gold);padding:4px 0;text-align:center}
-  .wc-luck-list{display:grid;gap:6px}
-  .wc-luck-row{display:flex;align-items:center;gap:10px}
-  .wc-luck-bar-wrap{flex:1;min-width:60px}
+  .wc-luck-list{display:grid;gap:8px}
+  .wc-luck-row{display:flex;align-items:flex-start;gap:10px}
+  .wc-luck-body{flex:1;min-width:0}
+  .wc-luck-top{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:5px;flex-wrap:wrap}
+  .wc-luck-name{font:600 14px 'DM Sans',sans-serif;color:var(--text);min-width:0}
+  .wc-luck-odds{font:600 11px 'DM Sans',sans-serif;color:var(--muted);text-align:right;flex-shrink:0;line-height:1.3;margin-left:auto}
   .wc-luck-bar{height:6px;background:var(--chip);border-radius:99px;overflow:hidden}
   .wc-luck-fill{height:100%;background:linear-gradient(90deg,var(--navy),var(--red));border-radius:99px;transition:width .4s ease}
   .wc-brag-list{display:grid;gap:12px;margin-top:4px}
