@@ -190,7 +190,7 @@ async function fetchShootoutScores(eventIds) {
 }
 
 export function parseEspnEvents(events) {
-  const results = [], scorerMap = {}, liveMatches = [], upcoming = [], fixtureSchedules = [];
+  const results = [], scorerMap = {}, scorersByEvent = {}, liveMatches = [], upcoming = [], fixtureSchedules = [];
   let liveCount = 0;
   events.forEach(ev => {
     const comp = ev.competitions?.[0]; if (!comp) return;
@@ -244,19 +244,28 @@ export function parseEspnEvents(events) {
     }
 
     if (completed) {
+      const matchMap = {};
       (comp.details || []).forEach(d => {
         const tx = (d?.type?.text || "").toLowerCase();
         if (d.scoringPlay && !/own goal/.test(tx)) {
           const nm = d.athletesInvolved?.[0]?.displayName; if (!nm) return;
           const tm = d.team?.id === home.team?.id ? a : b;
-          const k = nm + "|" + tm; (scorerMap[k] = scorerMap[k] || { p:nm, t:tm, g:0 }).g++;
+          const k = nm + "|" + tm;
+          matchMap[k] = (matchMap[k] || 0) + 1;
+          (scorerMap[k] = scorerMap[k] || { p:nm, t:tm, g:0 }).g++;
         }
       });
+      if (ev.id && Object.keys(matchMap).length) {
+        scorersByEvent[ev.id] = Object.entries(matchMap).map(([k, g]) => {
+          const [p, t] = k.split("|");
+          return { p, t, g };
+        });
+      }
     }
   });
 
   const scorers = Object.values(scorerMap).filter(s => OWNER_OF[s.t]).sort((x, y) => y.g - x.g).slice(0, 15);
-  return { results, scorers, liveCount, liveMatches, nextScheduled: pickNextScheduled(upcoming), fixtureSchedules };
+  return { results, scorers, scorersByEvent, liveCount, liveMatches, nextScheduled: pickNextScheduled(upcoming), fixtureSchedules };
 }
 
 export async function fetchESPN({ scope = "full" } = {}) {
