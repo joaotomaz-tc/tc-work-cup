@@ -1,7 +1,6 @@
-import { useRef, useState, useEffect } from 'react';
+import { useState } from 'react';
 import { OWNER_OF, OWNER_COLOR } from '../../data/owners.js';
-import { GROUP_OF, GROUP_LETTERS } from '../../data/tournament.js';
-import { R32_SLOTS, BRACKET_TREE, FEED_COLORS, KO_SCHEDULE } from '../../data/bracket.js';
+import { R32_SLOTS, BRACKET_TREE, KO_SCHEDULE } from '../../data/bracket.js';
 import { buildBracketTeams, koWL, getKoResult, slotLabel } from '../../lib/knockout.js';
 import { fmtFixtureWhen } from '../../lib/format.js';
 import { FlagDot } from '../ui/primitives.jsx';
@@ -9,7 +8,6 @@ import { FlagDot } from '../ui/primitives.jsx';
 const FILTER_KEY = 'tc-work-cup:bracketFilter';
 
 const STAGES = [
-  { key: 'group', label: 'Groups'      },
   { key: 'r32',   label: 'Round of 32' },
   { key: 'r16',   label: 'Round of 16' },
   { key: 'qf',    label: 'QF'          },
@@ -21,42 +19,6 @@ function stageIndex(key) {
   return STAGES.findIndex(s => s.key === key);
 }
 
-function GroupsCol({ A }) {
-  return (
-    <div className="wc-groups-col">
-      <div className="wc-bracket-col-label">Groups</div>
-      <div className="wc-groups-col-body">
-        {GROUP_LETTERS.map(L => {
-          const st = A.standings[L] || [];
-          const done = A.complete[L];
-          return (
-            <div key={L} className="wc-gfeed-card">
-              <div className="wc-gfeed-head">
-                <span className="wc-gm-badge">{L}</span>
-                {done && <span className="wc-gm-done">✓</span>}
-              </div>
-              <div className="wc-gfeed-rows">
-                {[0, 1, 2].map(i => {
-                  const s = st[i];
-                  const typeKey = i === 0 ? "w" : i === 1 ? "ru" : "3rd";
-                  return (
-                    <div key={i} className={`wc-gfeed-row wc-gfeed-row--${typeKey}`} data-feed={`${L}-${i}`}>
-                      <span className={`wc-gfeed-badge wc-gfeed-badge--${typeKey}`}>{i===0?"1st":i===1?"2nd":"3rd"}</span>
-                      {s
-                        ? <><FlagDot team={s.name}/><span className="wc-gfeed-name">{s.name}</span></>
-                        : <span className="wc-gfeed-name wc-gfeed-name--tbd">TBD</span>
-                      }
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 
 function BracketTeamRow({ team, score, pen, winner, loser, isLive, slotDef, matchId, side }) {
   const owner = team ? OWNER_OF[team] : null;
@@ -172,11 +134,10 @@ function BracketBody({ teams, ko, liveMatchMap, startRound }) {
 }
 
 export function BracketView({ A, state, liveMatchMap }) {
-  const innerRef = useRef(null);
-  const [lines, setLines] = useState([]);
-  const [startRound, setStartRound] = useState(
-    () => localStorage.getItem(FILTER_KEY) || 'r32'
-  );
+  const [startRound, setStartRound] = useState(() => {
+    const stored = localStorage.getItem(FILTER_KEY);
+    return (stored && stored !== 'group') ? stored : 'r32';
+  });
 
   const ko = state.ko || [];
   const teams = buildBracketTeams(A.standings, ko);
@@ -186,44 +147,6 @@ export function BracketView({ A, state, liveMatchMap }) {
     setStartRound(key);
     localStorage.setItem(FILTER_KEY, key);
   }
-
-  const showGroups = startRound === 'group';
-
-  useEffect(() => {
-    if (!showGroups) {
-      setLines([]);
-      return;
-    }
-    const inner = innerRef.current;
-    if (!inner) return;
-    const tid = setTimeout(() => {
-      const iRect = inner.getBoundingClientRect();
-      function pos(el) {
-        const r = el.getBoundingClientRect();
-        return { rx: r.right - iRect.left, lx: r.left - iRect.left, cy: r.top - iRect.top + r.height / 2 };
-      }
-      const newLines = [];
-      R32_SLOTS.forEach(slot => {
-        [["a", slot.a], ["b", slot.b]].forEach(([side, slotDef]) => {
-          let g = null, idx = null;
-          if (slotDef.type === "W")        { g = slotDef.g; idx = 0; }
-          else if (slotDef.type === "RU")  { g = slotDef.g; idx = 1; }
-          else if (slotDef.type === "3rd") {
-            const t = teams[slot.id]?.[side];
-            if (t) { g = GROUP_OF[t]; idx = 2; }
-          }
-          if (g === null) return;
-          const srcEl = inner.querySelector(`[data-feed="${g}-${idx}"]`);
-          const tgtEl = inner.querySelector(`[data-r32="${slot.id}-${side}"]`);
-          if (!srcEl || !tgtEl) return;
-          const s = pos(srcEl), t2 = pos(tgtEl);
-          newLines.push({ x1:s.rx, y1:s.cy, x2:t2.lx, y2:t2.cy, color:FEED_COLORS[idx], dash:idx===2 });
-        });
-      });
-      setLines(newLines);
-    }, 80);
-    return () => clearTimeout(tid);
-  }, [A.standings, ko.length, showGroups]);
 
   return (
     <div>
@@ -239,21 +162,7 @@ export function BracketView({ A, state, liveMatchMap }) {
         ))}
       </div>
       <div className="wc-bracket-scroll">
-        <div className="wc-bracket-inner" ref={innerRef}>
-          <svg className="wc-connector-svg" aria-hidden="true">
-            {lines.map((l, i) => {
-              const mx = (l.x1 + l.x2) / 2;
-              return (
-                <path key={i}
-                  d={`M${l.x1},${l.y1} C${mx},${l.y1} ${mx},${l.y2} ${l.x2},${l.y2}`}
-                  stroke={l.color} strokeWidth="1.5" fill="none" strokeOpacity="0.55"
-                  strokeDasharray={l.dash ? "5 3" : undefined}
-                />
-              );
-            })}
-          </svg>
-          {showGroups && <GroupsCol A={A}/>}
-          {showGroups && <div className="wc-connector-gap"/>}
+        <div className="wc-bracket-inner">
           <BracketBody teams={teams} ko={ko} liveMatchMap={safeLiveMatchMap} startRound={startRound}/>
         </div>
       </div>
