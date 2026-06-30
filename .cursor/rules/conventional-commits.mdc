@@ -1,0 +1,60 @@
+---
+description: Conventional commit messages for semantic-release
+alwaysApply: true
+---
+
+# Conventional commits (semantic-release)
+
+This repo uses [semantic-release](https://semantic-release.gitbook.io/) on `main`. **Every commit message you write or suggest must follow the Conventional Commits spec** so releases and changelogs are generated correctly.
+
+## Format
+
+```
+<type>(<optional scope>): <short imperative summary>
+
+<optional body>
+
+<optional footer(s)>
+```
+
+- **Subject line**: lowercase type, imperative mood, no trailing period, ~72 chars max
+- **Scope** (optional): area of change, e.g. `circle`, `bracket`, `tabs`, `ci`, `deps`
+- **Body**: only when the why/how is not obvious from the subject
+
+## Types (semantic-release)
+
+| Type | Release | Use for |
+|------|---------|---------|
+| `feat` | minor | New user-facing capability |
+| `fix` | patch | Bug fix |
+| `perf` | patch | Performance improvement |
+| `revert` | patch | Reverts a prior commit |
+| `docs` | none | README, comments, AGENTS only |
+| `style` | none | Formatting, whitespace, no logic change |
+| `refactor` | none | Code change without fix or feature |
+| `test` | none | Tests only |
+| `build` | none | Build tool or dependency changes |
+| `ci` | none | GitHub Actions, release config |
+| `chore` | none | Maintenance, scripts, misc |
+
+**Breaking change** → major version: add `!` after type/scope (`feat!:`) or a footer line `BREAKING CHANGE: <description>`.
+
+## Examples
+
+```
+feat(circle): show national badges and flags on elimination chart
+fix(tabs): group bracket and circle under knockout parent tab
+ci: add semantic-release and tag-based GitHub Pages deploy
+chore(deps): add semantic-release plugins
+fix(bracket): prevent mobile card overlap on small screens
+feat!: remove legacy groups tab from bracket view
+```
+
+## Do not
+
+- Use vague subjects: `update`, `changes`, `wip`, `fix stuff`
+- Use past tense: ~~`added feature`~~ → `add feature`
+- Capitalize the type: ~~`Feat:`~~ → `feat:`
+- Mention semantic-release/changelog in normal commits (release commits are created by CI with `chore(release): … [skip ci]`)
+
+When generating a commit message in Cursor (Source Control or agent), infer `type` and `scope` from the diff and match this format exactly.

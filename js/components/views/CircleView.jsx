@@ -1,45 +1,25 @@
 import { useMemo, useState } from 'react';
 import { OWNER_OF, OWNER_COLOR } from '../../data/owners.js';
 import { buildBracketTeams, koWL } from '../../lib/knockout.js';
+import { flagUrl, badgeUrl } from '../../data/teamAssets.js';
 
-/* ── Team abbreviations ─────────────────────────────────────────── */
-const ABBR = {
-  "United States":"USA","Bosnia & Herzegovina":"BiH",
-  "Saudi Arabia":"KSA","South Africa":"RSA","South Korea":"KOR",
-  "DR Congo":"DRC","New Zealand":"NZL","Cape Verde":"CPV",
-  "Ivory Coast":"CIV","Netherlands":"NED","Trinidad & Tobago":"T&T",
-  "Curaçao":"CUR",
-};
-const ta = name => !name ? "?" : (ABBR[name] || name.slice(0,3).toUpperCase());
+const TROPHY = `${import.meta.env.BASE_URL}images/world-cup-trophy.png`;
+const TROPHY_SZ = 118;
 const ownerCol = team => team ? (OWNER_COLOR[OWNER_OF[team]] || null) : null;
 
-// Return dark or white text colour for good contrast against a hex background
-function contrastText(hex) {
-  if (!hex || hex[0] !== '#') return '#ffffff';
-  const r = parseInt(hex.slice(1,3), 16);
-  const g = parseInt(hex.slice(3,5), 16);
-  const b = parseInt(hex.slice(5,7), 16);
-  // Perceived luminance formula
-  const lum = (0.299*r + 0.587*g + 0.114*b) / 255;
-  return lum > 0.52 ? '#1a1a2e' : '#ffffff';
-}
-
 /* ── SVG geometry ─────────────────────────────────────────────── */
-const SZ = 760, CX = 380, CY = 380;
-// Radii for each elimination round (outer → inner)
-const R_TM = 320; // team circles (outer ring)
-const R_32 = 263; // R32 result nodes
-const R_16 = 204; // R16 result nodes
-const R_QF = 145; // QF result nodes
-const R_SF =  86; // SF result nodes
-// champion sits at (CX, CY)
+const SZ = 800, CX = 400, CY = 400;
+const R_CREST = 358;
+const R_TM = 308;
+const R_32 = 252;
+const R_16 = 196;
+const R_QF = 140;
+const R_SF = 84;
 
-const TM_R = 23;   // team circle radius
-const TM_FONT = 9; // team label font size (viewBox units)
+const CREST_SZ = 42;
+const FLAG_R = 17;
+const N = 32, STEP = (2 * Math.PI) / N, A0 = -Math.PI / 2;
 
-const N = 32, STEP = (2 * Math.PI) / N, A0 = -Math.PI / 2; // start at 12 o'clock
-
-// Angle functions (all clockwise from top)
 const angPos = pos => A0 + pos * STEP;
 const ang32  = k   => A0 + (2*k + 0.5) * STEP;
 const ang16  = k   => A0 + (4*k + 1.5) * STEP;
@@ -47,17 +27,10 @@ const angQF  = k   => A0 + (8*k + 3.5) * STEP;
 const angSF  = k   => A0 + (16*k + 7.5) * STEP;
 const pol    = (a, r) => ({ x: CX + r * Math.cos(a), y: CY + r * Math.sin(a) });
 
-/* ── Circular match ordering ──────────────────────────────────── */
-// 16 R32 match IDs placed clockwise from 12 o'clock.
-// Indices 0–7  → feed SF m101 (top-right quarter-circle)
-// Indices 8–15 → feed SF m102 (bottom-left quarter-circle)
-// This embedding means the two finalists sit near 12 o'clock and 6 o'clock.
 const R32_IDS = [
   "m74","m77","m73","m75","m83","m84","m81","m82",
   "m86","m88","m85","m87","m76","m78","m79","m80",
 ];
-
-// R16: each entry pairs two consecutive R32 circular indices → one R16 node
 const R16_DEF = [
   { id:"m89", ai:0,  bi:1  }, { id:"m90", ai:2,  bi:3  },
   { id:"m93", ai:4,  bi:5  }, { id:"m94", ai:6,  bi:7  },
@@ -73,19 +46,59 @@ const SF_DEF = [
   { id:"m102", ai:2, bi:3 },
 ];
 
-/* ── Line styling helpers ─────────────────────────────────────── */
-// won: true = won the match at the downstream node
-//      false = lost that match (eliminated there)
-//      null = match not played yet (team is present but waiting)
 function lineStyle(team, won) {
-  if (!team) return { stroke:"var(--line)", opacity:0.14, strokeWidth:1 };
-  const c = ownerCol(team) || "var(--muted)";
-  if (won === true)  return { stroke:c, opacity:0.92, strokeWidth:2.8 };
-  if (won === false) return { stroke:"var(--line-2)", opacity:0.25, strokeWidth:1 };
-  return { stroke:c, opacity:0.42, strokeWidth:1.6 }; // pending
+  if (!team) return { className: "circle-line circle-line--empty" };
+  const stroke = ownerCol(team) || "var(--accent)";
+  if (won === true)  return { className: "circle-line circle-line--won", stroke };
+  if (won === false) return { className: "circle-line circle-line--out" };
+  return { className: "circle-line circle-line--pending" };
 }
 
-/* ── Component ────────────────────────────────────────────────── */
+function BracketLine({ x1, y1, x2, y2, ls }) {
+  return (
+    <line x1={x1} y1={y1} x2={x2} y2={y2}
+      className={ls.className}
+      stroke={ls.stroke || undefined}/>
+  );
+}
+
+function FlagCircle({ id, team, x, y, r, dimmed = false }) {
+  const url = flagUrl(team);
+  if (!team || !url) {
+    return (
+      <circle cx={x} cy={y} r={r} className="circle-node circle-node--slot"/>
+    );
+  }
+  return (
+    <g className={dimmed ? "circle-node--dimmed" : undefined}>
+      <defs>
+        <clipPath id={id}>
+          <circle cx={x} cy={y} r={r - 0.5}/>
+        </clipPath>
+      </defs>
+      <circle cx={x} cy={y} r={r} className="circle-node" strokeWidth={1.2}/>
+      <image href={url} x={x - r} y={y - r} width={r * 2} height={r * 2}
+        clipPath={`url(#${id})`} preserveAspectRatio="xMidYMid slice"/>
+    </g>
+  );
+}
+
+function TeamBadge({ team, x, y, size, dimmed = false }) {
+  const url = badgeUrl(team);
+  const half = size / 2;
+  if (!team || !url) {
+    return (
+      <circle cx={x} cy={y} r={half * 0.7} className="circle-node circle-node--slot"/>
+    );
+  }
+  return (
+    <g className={dimmed ? "circle-node--dimmed" : undefined}>
+      <image href={url} x={x - half} y={y - half} width={size} height={size}
+        preserveAspectRatio="xMidYMid meet"/>
+    </g>
+  );
+}
+
 export function CircleView({ A, state }) {
   const ko = state.ko || [];
   const [hov, setHov] = useState(null);
@@ -95,7 +108,6 @@ export function CircleView({ A, state }) {
     [A.standings, ko]
   );
 
-  // Winner of a match given its {a, b} teams object
   function mwinner(teams) {
     const { a, b } = teams || {};
     if (!a || !b) return null;
@@ -104,7 +116,6 @@ export function CircleView({ A, state }) {
     return m ? koWL(m)?.w : null;
   }
 
-  // Build round data arrays
   const r32d = R32_IDS.map((id, k) => {
     const t = bt[id] || {};
     return { id, k, a: t.a||null, b: t.b||null, win: mwinner(t) };
@@ -123,7 +134,6 @@ export function CircleView({ A, state }) {
   });
   const champ = mwinner(bt["m104"] || {});
 
-  // Line props: from a source team flowing into a downstream match
   const seg = (srcTeam, destWin, destPlayed) => {
     if (!srcTeam) return lineStyle(null, null);
     const won = destPlayed ? (destWin === srcTeam) : null;
@@ -132,16 +142,20 @@ export function CircleView({ A, state }) {
 
   const isOut = t => t ? !!A.teamOut[t] : false;
 
-  // Node color
-  const nc = (win, fallback = "var(--surface-2)") =>
-    win ? (ownerCol(win) || "var(--muted)") : fallback;
+  const outerTeams = R32_IDS.flatMap((id, k) => {
+    const { a, b } = bt[id] || {};
+    return [
+      { pos: 2*k,   team: a || null },
+      { pos: 2*k+1, team: b || null },
+    ];
+  });
 
   return (
     <section className="circle-wrap">
       <div className="circle-hdr">
         <h2 className="display circle-title">Circle of Elimination</h2>
         <p className="circle-sub">
-          Knockout bracket as a circle — teams advance inward round by round. The champion reaches the centre.
+          Knockout bracket as a circle — national crests and flags advance inward round by round toward the trophy.
         </p>
       </div>
 
@@ -150,18 +164,26 @@ export function CircleView({ A, state }) {
           viewBox={`0 0 ${SZ} ${SZ}`}
           className="circle-svg"
           role="img"
-          aria-label="Circular knockout bracket"
+          aria-label="Circular knockout bracket with national flags and crests"
         >
-          {/* ── Decorative background rings ─────────────────── */}
-          <circle cx={CX} cy={CY} r={R_TM + TM_R + 4} fill="none"
-            stroke="var(--line)" strokeWidth={1.5} opacity={0.28}/>
+          <defs>
+            <radialGradient id="circle-bg-glow" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stopColor="var(--gold)" stopOpacity="0.14"/>
+              <stop offset="100%" stopColor="var(--gold)" stopOpacity="0"/>
+            </radialGradient>
+            <radialGradient id="trophy-glow" cx="50%" cy="55%" r="50%">
+              <stop offset="0%" stopColor="var(--gold)" stopOpacity="0.3"/>
+              <stop offset="100%" stopColor="var(--gold)" stopOpacity="0"/>
+            </radialGradient>
+          </defs>
+
+          <circle cx={CX} cy={CY} r={R_CREST + CREST_SZ / 2 + 8} fill="url(#circle-bg-glow)"/>
+
           {[R_32, R_16, R_QF, R_SF].map(r => (
-            <circle key={r} cx={CX} cy={CY} r={r} fill="none"
-              stroke="var(--line)" strokeWidth={0.8}
-              strokeDasharray="4 6" opacity={0.2}/>
+            <circle key={r} cx={CX} cy={CY} r={r} className="circle-ring-guide"/>
           ))}
 
-          {/* ── Lines: outer team nodes → R32 match nodes ─── */}
+          {/* Bracket lines */}
           {r32d.flatMap(({ id, k, a, b, win }) => {
             const r32p = pol(ang32(k), R_32);
             const played = win != null;
@@ -173,15 +195,13 @@ export function CircleView({ A, state }) {
               const won = played ? (win === team) : null;
               const ls = lineStyle(team, won);
               return (
-                <line key={`${id}-${pos}`}
-                  x1={tp.x} y1={tp.y} x2={r32p.x} y2={r32p.y}
-                  stroke={ls.stroke} strokeWidth={ls.strokeWidth} opacity={ls.opacity}/>
+                <BracketLine key={`${id}-${pos}`}
+                  x1={tp.x} y1={tp.y} x2={r32p.x} y2={r32p.y} ls={ls}/>
               );
             });
           })}
 
-          {/* ── Lines: R32 nodes → R16 nodes ─────────────── */}
-          {r16d.flatMap(({ id, k, ai, bi, win }) => {
+          {r16d.flatMap(({ k, ai, bi, win }) => {
             const r16p = pol(ang16(k), R_16);
             const played = win != null;
             return [ai, bi].map(r32k => {
@@ -189,15 +209,13 @@ export function CircleView({ A, state }) {
               const src = r32d[r32k].win;
               const ls = seg(src, win, played);
               return (
-                <line key={`r32-${r32k}-r16-${k}`}
-                  x1={r32p.x} y1={r32p.y} x2={r16p.x} y2={r16p.y}
-                  stroke={ls.stroke} strokeWidth={ls.strokeWidth} opacity={ls.opacity}/>
+                <BracketLine key={`r32-${r32k}-r16-${k}`}
+                  x1={r32p.x} y1={r32p.y} x2={r16p.x} y2={r16p.y} ls={ls}/>
               );
             });
           })}
 
-          {/* ── Lines: R16 nodes → QF nodes ──────────────── */}
-          {qfd.flatMap(({ id, k, ai, bi, win }) => {
+          {qfd.flatMap(({ k, ai, bi, win }) => {
             const qfp = pol(angQF(k), R_QF);
             const played = win != null;
             return [ai, bi].map(r16k => {
@@ -205,15 +223,13 @@ export function CircleView({ A, state }) {
               const src = r16d[r16k].win;
               const ls = seg(src, win, played);
               return (
-                <line key={`r16-${r16k}-qf-${k}`}
-                  x1={r16p.x} y1={r16p.y} x2={qfp.x} y2={qfp.y}
-                  stroke={ls.stroke} strokeWidth={ls.strokeWidth} opacity={ls.opacity}/>
+                <BracketLine key={`r16-${r16k}-qf-${k}`}
+                  x1={r16p.x} y1={r16p.y} x2={qfp.x} y2={qfp.y} ls={ls}/>
               );
             });
           })}
 
-          {/* ── Lines: QF nodes → SF nodes ───────────────── */}
-          {sfd.flatMap(({ id, k, ai, bi, win }) => {
+          {sfd.flatMap(({ k, ai, bi, win }) => {
             const sfp = pol(angSF(k), R_SF);
             const played = win != null;
             return [ai, bi].map(qfk => {
@@ -221,155 +237,100 @@ export function CircleView({ A, state }) {
               const src = qfd[qfk].win;
               const ls = seg(src, win, played);
               return (
-                <line key={`qf-${qfk}-sf-${k}`}
-                  x1={qfp.x} y1={qfp.y} x2={sfp.x} y2={sfp.y}
-                  stroke={ls.stroke} strokeWidth={ls.strokeWidth} opacity={ls.opacity}/>
+                <BracketLine key={`qf-${qfk}-sf-${k}`}
+                  x1={qfp.x} y1={qfp.y} x2={sfp.x} y2={sfp.y} ls={ls}/>
               );
             });
           })}
 
-          {/* ── Lines: SF nodes → centre (Final) ─────────── */}
           {sfd.map(({ k, win }) => {
             const sfp = pol(angSF(k), R_SF);
             const played = champ != null;
             const ls = seg(win, champ, played);
             return (
-              <line key={`sf-${k}-final`}
-                x1={sfp.x} y1={sfp.y} x2={CX} y2={CY}
-                stroke={ls.stroke} strokeWidth={ls.strokeWidth} opacity={ls.opacity}/>
+              <BracketLine key={`sf-${k}-final`}
+                x1={sfp.x} y1={sfp.y} x2={CX} y2={CY} ls={ls}/>
             );
           })}
 
-          {/* ── R32 result nodes ─────────────────────────── */}
+          {/* Inner round flags */}
           {r32d.map(({ id, k, win }) => {
             const p = pol(ang32(k), R_32);
             return (
-              <circle key={`${id}-nd`}
-                cx={p.x} cy={p.y} r={win ? 7 : 5}
-                fill={nc(win)} stroke="var(--surface)" strokeWidth={1.5}/>
+              <FlagCircle key={`${id}-f`} id={`f32-${k}`} team={win}
+                x={p.x} y={p.y} r={win ? 11 : 7} dimmed={win && isOut(win)}/>
             );
           })}
 
-          {/* ── R16 result nodes ─────────────────────────── */}
           {r16d.map(({ id, k, win }) => {
             const p = pol(ang16(k), R_16);
-            const fill = nc(win);
-            const txt = win ? contrastText(ownerCol(win) || "#888") : "#fff";
             return (
-              <g key={`${id}-nd`}>
-                <circle cx={p.x} cy={p.y} r={win ? 10 : 7}
-                  fill={fill} stroke="var(--surface)" strokeWidth={2}/>
-                {win && (
-                  <text x={p.x} y={p.y} textAnchor="middle" dominantBaseline="central"
-                    fontSize="6" fontWeight="700" fill={txt}>{ta(win)}</text>
-                )}
-              </g>
+              <FlagCircle key={`${id}-f`} id={`f16-${k}`} team={win}
+                x={p.x} y={p.y} r={win ? 13 : 9} dimmed={win && isOut(win)}/>
             );
           })}
 
-          {/* ── QF result nodes ──────────────────────────── */}
           {qfd.map(({ id, k, win }) => {
             const p = pol(angQF(k), R_QF);
-            const fill = nc(win);
-            const txt = win ? contrastText(ownerCol(win) || "#888") : "#fff";
             return (
-              <g key={`${id}-nd`}>
-                <circle cx={p.x} cy={p.y} r={win ? 13 : 9}
-                  fill={fill} stroke="var(--surface)" strokeWidth={2}/>
-                {win && (
-                  <text x={p.x} y={p.y} textAnchor="middle" dominantBaseline="central"
-                    fontSize="6.5" fontWeight="700" fill={txt}>{ta(win)}</text>
-                )}
-              </g>
+              <FlagCircle key={`${id}-f`} id={`fqf-${k}`} team={win}
+                x={p.x} y={p.y} r={win ? 15 : 10} dimmed={win && isOut(win)}/>
             );
           })}
 
-          {/* ── SF result nodes ───────────────────────────── */}
           {sfd.map(({ id, k, win }) => {
             const p = pol(angSF(k), R_SF);
-            const fill = nc(win);
-            const txt = win ? contrastText(ownerCol(win) || "#888") : "#fff";
             return (
-              <g key={`${id}-nd`}>
-                <circle cx={p.x} cy={p.y} r={win ? 16 : 11}
-                  fill={fill} stroke="var(--surface)" strokeWidth={2}/>
-                {win && (
-                  <text x={p.x} y={p.y} textAnchor="middle" dominantBaseline="central"
-                    fontSize="7" fontWeight="700" fill={txt}>{ta(win)}</text>
-                )}
-              </g>
+              <FlagCircle key={`${id}-f`} id={`fsf-${k}`} team={win}
+                x={p.x} y={p.y} r={win ? 17 : 12} dimmed={win && isOut(win)}/>
             );
           })}
 
-          {/* ── Outer team circles (rendered last = on top) ─ */}
-          {R32_IDS.flatMap((id, k) => {
-            const { a, b } = bt[id] || {};
-            return [
-              { pos: 2*k,   team: a || null },
-              { pos: 2*k+1, team: b || null },
-            ];
-          }).map(({ pos, team }) => {
-            const p = pol(angPos(pos), R_TM);
+          {/* Outer flags + crests */}
+          {outerTeams.map(({ pos, team }) => {
+            const a = angPos(pos);
+            const fp = pol(a, R_TM);
+            const cp = pol(a, R_CREST);
             const eliminated = isOut(team);
             const isHov = hov === team && team != null;
-            const fillColor = ownerCol(team) || "var(--line-2)";
-            const txtColor  = ownerCol(team) ? contrastText(ownerCol(team)) : "#999";
             return (
               <g key={`tm-${pos}`}
                 onMouseEnter={() => team && setHov(team)}
                 onMouseLeave={() => setHov(null)}
                 style={{ cursor: team ? "pointer" : "default" }}>
-                <circle
-                  cx={p.x} cy={p.y} r={isHov ? TM_R + 2 : TM_R}
-                  fill={fillColor}
-                  opacity={eliminated ? 0.3 : 1}
-                  stroke={isHov ? "#fff" : "var(--surface)"}
-                  strokeWidth={isHov ? 3 : 2.5}/>
-                {/* Abbreviated country code, contrast-coloured */}
-                <text
-                  x={p.x} y={p.y}
-                  textAnchor="middle" dominantBaseline="central"
-                  fontSize={TM_FONT} fontWeight="800" fill={txtColor}
-                  opacity={eliminated ? 0.6 : 1}
-                  letterSpacing="-0.3">
-                  {ta(team)}
-                </text>
+                <TeamBadge team={team} x={cp.x} y={cp.y} size={CREST_SZ}
+                  dimmed={eliminated}/>
+                <g transform={isHov ? `translate(${fp.x},${fp.y}) scale(1.12) translate(${-fp.x},${-fp.y})` : undefined}>
+                  <FlagCircle id={`out-${pos}`} team={team} x={fp.x} y={fp.y} r={FLAG_R}
+                    dimmed={eliminated}/>
+                </g>
+                {isHov && (
+                  <circle cx={fp.x} cy={fp.y} r={FLAG_R + 3} className="circle-hover-ring"/>
+                )}
               </g>
             );
           })}
 
-          {/* ── Champion at centre ────────────────────────── */}
-          <g>
-            <circle cx={CX} cy={CY} r={34}
-              fill={champ ? (ownerCol(champ) || "var(--muted)") : "var(--surface)"}
-              stroke={champ ? "#F5C518" : "var(--line)"}
-              strokeWidth={champ ? 3.5 : 1.5}/>
-            {champ ? (
-              <>
-                <text x={CX} y={CY - 9} textAnchor="middle" dominantBaseline="central"
-                  fontSize="10" fontWeight="800"
-                  fill={contrastText(ownerCol(champ) || "#888")}
-                  letterSpacing="-0.3">
-                  {ta(champ)}
-                </text>
-                <text x={CX} y={CY + 11} textAnchor="middle" dominantBaseline="central"
-                  fontSize="16">🏆</text>
-              </>
-            ) : (
-              <text x={CX} y={CY} textAnchor="middle" dominantBaseline="central"
-                fontSize="26">🏆</text>
-            )}
-          </g>
+          {/* Centre trophy */}
+          <circle cx={CX} cy={CY} r={78} fill="url(#trophy-glow)"/>
+          <image href={TROPHY} x={CX - TROPHY_SZ / 2} y={CY - TROPHY_SZ / 2 - 10}
+            width={TROPHY_SZ} height={TROPHY_SZ} preserveAspectRatio="xMidYMid meet"/>
+          {champ && (
+            <FlagCircle id="champ-flag" team={champ} x={CX} y={CY + 68} r={14}
+              dimmed={isOut(champ)}/>
+          )}
         </svg>
       </div>
 
-      {/* ── Hover tooltip ─────────────────────────────────── */}
       {hov && (() => {
         const owner = OWNER_OF[hov];
         const eliminated = isOut(hov);
         return (
           <div className="circle-tip">
-            <span className="circle-tip-dot" style={{ background: ownerCol(hov) || "var(--muted)" }}/>
+            <img className="circle-tip-flag" src={flagUrl(hov)} alt="" width={20} height={20}/>
+            {badgeUrl(hov) && (
+              <img className="circle-tip-badge" src={badgeUrl(hov)} alt="" width={22} height={22}/>
+            )}
             <span className="circle-tip-name">{hov}</span>
             {owner && (
               <span className="circle-tip-owner" style={{ color: OWNER_COLOR[owner] }}>
@@ -381,7 +342,6 @@ export function CircleView({ A, state }) {
         );
       })()}
 
-      {/* ── Round key ────────────────────────────────────── */}
       <div className="circle-key">
         {[
           { code:"R32", label:"Round of 32" },
@@ -397,7 +357,6 @@ export function CircleView({ A, state }) {
         ))}
       </div>
 
-      {/* ── Legend ───────────────────────────────────────── */}
       <div className="circle-legend">
         <span className="circle-legend-item">
           <span className="circle-legend-line circle-legend-line--active"/>
