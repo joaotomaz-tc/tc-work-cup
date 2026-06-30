@@ -7,6 +7,9 @@
     "type": "git",
     "url": "git+https://github.com/joaotomaz-tc/tc-work-cup.git"
   },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
