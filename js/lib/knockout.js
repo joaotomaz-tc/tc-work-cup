@@ -1,7 +1,12 @@
 import { GROUP_LETTERS } from '../data/tournament.js';
 import { GROUP_OF } from '../data/tournament.js';
 import { R32_SLOTS, BRACKET_TREE, ALL_BRACKET } from '../data/bracket.js';
+import { ANNEX_C_WINNERS, ANNEX_C_ROWS } from '../data/annex_c.js';
 import { strength } from '../data/odds.js';
+
+// Precompute group-winner-letter → R32 slot id (for Annex C lookup)
+const WINNER_SLOT = {};
+R32_SLOTS.forEach(s => { if (s.a.type === "W") WINNER_SLOT[s.a.g] = s.id; });
 
 export function koWL(m) {
   if (m.hs == null || m.as == null) return null;
@@ -12,7 +17,9 @@ export function koWL(m) {
   return null;
 }
 
-// Assign best 8 third-place teams to R32 slots (greedy — approximates FIFA Annex C)
+// Assign best 8 third-place teams to R32 slots using the official FIFA
+// Annex C lookup table. Falls back to the greedy heuristic when fewer
+// than 8 third-place teams are known (i.e. group stage still in progress).
 export function assign3rdSlots(standings) {
   const thirds = GROUP_LETTERS
     .map(L => standings[L] && standings[L][2])
@@ -22,6 +29,24 @@ export function assign3rdSlots(standings) {
       strength(b.name) - strength(a.name)
     )
     .slice(0, 8);
+
+  // Once all 8 qualifying 3rd-place teams are known, use the official Annex C table.
+  if (thirds.length === 8) {
+    const combo = thirds.map(t => GROUP_OF[t.name]).sort().join("");
+    const row = ANNEX_C_ROWS.find(r => [...r].sort().join("") === combo);
+    if (row) {
+      const result = {};
+      ANNEX_C_WINNERS.forEach((winnerGroup, i) => {
+        const thirdGroup = row[i];
+        const third = thirds.find(t => GROUP_OF[t.name] === thirdGroup);
+        const slotId = WINNER_SLOT[winnerGroup];
+        if (third && slotId) result[slotId] = third.name;
+      });
+      return result;
+    }
+  }
+
+  // Fallback: greedy assignment used during an incomplete group stage.
   const used = new Set();
   const result = {};
   for (const slot of R32_SLOTS.filter(s => s.b.type === "3rd")) {
