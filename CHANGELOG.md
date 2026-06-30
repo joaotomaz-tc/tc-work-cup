@@ -1,3 +1,10 @@
+## [1.1.1](https://github.com/joaotomaz-tc/tc-work-cup/compare/v1.1.0...v1.1.1) (2026-06-30)
+
+
+### Bug Fixes
+
+* **drama:** keep Draw Luck strength values inside the card ([5125248](https://github.com/joaotomaz-tc/tc-work-cup/commit/5125248cec4e31a50391a98c3c5a6703e94298dd))
+
 # [1.1.0](https://github.com/joaotomaz-tc/tc-work-cup/compare/v1.0.0...v1.1.0) (2026-06-30)
 
 
