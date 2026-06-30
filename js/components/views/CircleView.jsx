@@ -13,15 +13,29 @@ const ABBR = {
 const ta = name => !name ? "?" : (ABBR[name] || name.slice(0,3).toUpperCase());
 const ownerCol = team => team ? (OWNER_COLOR[OWNER_OF[team]] || null) : null;
 
+// Return dark or white text colour for good contrast against a hex background
+function contrastText(hex) {
+  if (!hex || hex[0] !== '#') return '#ffffff';
+  const r = parseInt(hex.slice(1,3), 16);
+  const g = parseInt(hex.slice(3,5), 16);
+  const b = parseInt(hex.slice(5,7), 16);
+  // Perceived luminance formula
+  const lum = (0.299*r + 0.587*g + 0.114*b) / 255;
+  return lum > 0.52 ? '#1a1a2e' : '#ffffff';
+}
+
 /* ── SVG geometry ─────────────────────────────────────────────── */
-const SZ = 720, CX = 360, CY = 360;
+const SZ = 760, CX = 380, CY = 380;
 // Radii for each elimination round (outer → inner)
-const R_TM = 306; // team circles (outer ring)
-const R_32 = 251; // R32 result nodes
-const R_16 = 194; // R16 result nodes
-const R_QF = 137; // QF result nodes
-const R_SF =  80; // SF result nodes
+const R_TM = 320; // team circles (outer ring)
+const R_32 = 263; // R32 result nodes
+const R_16 = 204; // R16 result nodes
+const R_QF = 145; // QF result nodes
+const R_SF =  86; // SF result nodes
 // champion sits at (CX, CY)
+
+const TM_R = 23;   // team circle radius
+const TM_FONT = 9; // team label font size (viewBox units)
 
 const N = 32, STEP = (2 * Math.PI) / N, A0 = -Math.PI / 2; // start at 12 o'clock
 
@@ -139,7 +153,7 @@ export function CircleView({ A, state }) {
           aria-label="Circular knockout bracket"
         >
           {/* ── Decorative background rings ─────────────────── */}
-          <circle cx={CX} cy={CY} r={R_TM + 23} fill="none"
+          <circle cx={CX} cy={CY} r={R_TM + TM_R + 4} fill="none"
             stroke="var(--line)" strokeWidth={1.5} opacity={0.28}/>
           {[R_32, R_16, R_QF, R_SF].map(r => (
             <circle key={r} cx={CX} cy={CY} r={r} fill="none"
@@ -239,13 +253,15 @@ export function CircleView({ A, state }) {
           {/* ── R16 result nodes ─────────────────────────── */}
           {r16d.map(({ id, k, win }) => {
             const p = pol(ang16(k), R_16);
+            const fill = nc(win);
+            const txt = win ? contrastText(ownerCol(win) || "#888") : "#fff";
             return (
               <g key={`${id}-nd`}>
                 <circle cx={p.x} cy={p.y} r={win ? 10 : 7}
-                  fill={nc(win)} stroke="var(--surface)" strokeWidth={2}/>
+                  fill={fill} stroke="var(--surface)" strokeWidth={2}/>
                 {win && (
                   <text x={p.x} y={p.y} textAnchor="middle" dominantBaseline="central"
-                    fontSize="6" fontWeight="700" fill="white">{ta(win)}</text>
+                    fontSize="6" fontWeight="700" fill={txt}>{ta(win)}</text>
                 )}
               </g>
             );
@@ -254,13 +270,15 @@ export function CircleView({ A, state }) {
           {/* ── QF result nodes ──────────────────────────── */}
           {qfd.map(({ id, k, win }) => {
             const p = pol(angQF(k), R_QF);
+            const fill = nc(win);
+            const txt = win ? contrastText(ownerCol(win) || "#888") : "#fff";
             return (
               <g key={`${id}-nd`}>
                 <circle cx={p.x} cy={p.y} r={win ? 13 : 9}
-                  fill={nc(win)} stroke="var(--surface)" strokeWidth={2}/>
+                  fill={fill} stroke="var(--surface)" strokeWidth={2}/>
                 {win && (
                   <text x={p.x} y={p.y} textAnchor="middle" dominantBaseline="central"
-                    fontSize="6.5" fontWeight="700" fill="white">{ta(win)}</text>
+                    fontSize="6.5" fontWeight="700" fill={txt}>{ta(win)}</text>
                 )}
               </g>
             );
@@ -269,13 +287,15 @@ export function CircleView({ A, state }) {
           {/* ── SF result nodes ───────────────────────────── */}
           {sfd.map(({ id, k, win }) => {
             const p = pol(angSF(k), R_SF);
+            const fill = nc(win);
+            const txt = win ? contrastText(ownerCol(win) || "#888") : "#fff";
             return (
               <g key={`${id}-nd`}>
                 <circle cx={p.x} cy={p.y} r={win ? 16 : 11}
-                  fill={nc(win)} stroke="var(--surface)" strokeWidth={2}/>
+                  fill={fill} stroke="var(--surface)" strokeWidth={2}/>
                 {win && (
                   <text x={p.x} y={p.y} textAnchor="middle" dominantBaseline="central"
-                    fontSize="7" fontWeight="700" fill="white">{ta(win)}</text>
+                    fontSize="7" fontWeight="700" fill={txt}>{ta(win)}</text>
                 )}
               </g>
             );
@@ -292,24 +312,26 @@ export function CircleView({ A, state }) {
             const p = pol(angPos(pos), R_TM);
             const eliminated = isOut(team);
             const isHov = hov === team && team != null;
-            const color = ownerCol(team) || "var(--line-2)";
+            const fillColor = ownerCol(team) || "var(--line-2)";
+            const txtColor  = ownerCol(team) ? contrastText(ownerCol(team)) : "#999";
             return (
               <g key={`tm-${pos}`}
                 onMouseEnter={() => team && setHov(team)}
                 onMouseLeave={() => setHov(null)}
                 style={{ cursor: team ? "pointer" : "default" }}>
                 <circle
-                  cx={p.x} cy={p.y} r={isHov ? 22 : 20}
-                  fill={color}
-                  opacity={eliminated ? 0.28 : 1}
+                  cx={p.x} cy={p.y} r={isHov ? TM_R + 2 : TM_R}
+                  fill={fillColor}
+                  opacity={eliminated ? 0.3 : 1}
                   stroke={isHov ? "#fff" : "var(--surface)"}
-                  strokeWidth={isHov ? 3 : 2}/>
+                  strokeWidth={isHov ? 3 : 2.5}/>
+                {/* Abbreviated country code, contrast-coloured */}
                 <text
                   x={p.x} y={p.y}
                   textAnchor="middle" dominantBaseline="central"
-                  fontSize="7.5" fontWeight="700" fill="white"
-                  opacity={eliminated ? 0.55 : 1}
-                  letterSpacing="-0.2">
+                  fontSize={TM_FONT} fontWeight="800" fill={txtColor}
+                  opacity={eliminated ? 0.6 : 1}
+                  letterSpacing="-0.3">
                   {ta(team)}
                 </text>
               </g>
@@ -318,22 +340,24 @@ export function CircleView({ A, state }) {
 
           {/* ── Champion at centre ────────────────────────── */}
           <g>
-            <circle cx={CX} cy={CY} r={32}
+            <circle cx={CX} cy={CY} r={34}
               fill={champ ? (ownerCol(champ) || "var(--muted)") : "var(--surface)"}
               stroke={champ ? "#F5C518" : "var(--line)"}
               strokeWidth={champ ? 3.5 : 1.5}/>
             {champ ? (
               <>
-                <text x={CX} y={CY - 8} textAnchor="middle" dominantBaseline="central"
-                  fontSize="9" fontWeight="800" fill="white" letterSpacing="-0.3">
+                <text x={CX} y={CY - 9} textAnchor="middle" dominantBaseline="central"
+                  fontSize="10" fontWeight="800"
+                  fill={contrastText(ownerCol(champ) || "#888")}
+                  letterSpacing="-0.3">
                   {ta(champ)}
                 </text>
-                <text x={CX} y={CY + 10} textAnchor="middle" dominantBaseline="central"
+                <text x={CX} y={CY + 11} textAnchor="middle" dominantBaseline="central"
                   fontSize="16">🏆</text>
               </>
             ) : (
               <text x={CX} y={CY} textAnchor="middle" dominantBaseline="central"
-                fontSize="24">🏆</text>
+                fontSize="26">🏆</text>
             )}
           </g>
         </svg>
