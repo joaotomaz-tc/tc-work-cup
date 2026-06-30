@@ -91,13 +91,17 @@ export function DramaView({ A, state }) {
             <div key={d.owner} className="wc-luck-row">
               <span className="wc-list-rank">{i+1}</span>
               <Crest owner={d.owner} size={22}/>
-              <span style={{ font:"600 14px 'DM Sans',sans-serif", color:"var(--text)", flex:1, minWidth:60 }}>{d.owner}</span>
-              <div className="wc-luck-bar-wrap">
-                <div className="wc-luck-bar"><div className="wc-luck-fill" style={{ width:`${(d.strength/A.drawLuck[0].strength)*100}%` }}/></div>
+              <div className="wc-luck-body">
+                <div className="wc-luck-top">
+                  <span className="wc-luck-name">{d.owner}</span>
+                  <span className="wc-luck-odds">
+                    {d.teams.map(t => `${(1 / strength(t)).toFixed(0)}`).join(" / ")}
+                  </span>
+                </div>
+                <div className="wc-luck-bar">
+                  <div className="wc-luck-fill" style={{ width:`${(d.strength / A.drawLuck[0].strength) * 100}%` }}/>
+                </div>
               </div>
-              <span style={{ font:"600 11px 'DM Sans',sans-serif", color:"var(--muted)", width:40, textAlign:"right", flexShrink:0 }}>
-                {d.teams.map(t => `${(1/strength(t)).toFixed(0)}`).join("/")}
-              </span>
             </div>
           ))}
         </div>
