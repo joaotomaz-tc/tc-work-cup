@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { OWNERS, OWNER_OF } from './data/owners.js';
 import { ALL_TEAMS } from './data/tournament.js';
-import { TABS, THEME_KEY, ME_KEY } from './data/config.js';
+import { THEME_KEY, ME_KEY } from './data/config.js';
 import { analyse, confirmedState } from './lib/scoring.js';
-import { tabFromHash, selectTab } from './lib/tabs.js';
+import { tabFromHash } from './lib/tabs.js';
 import { loadPersistedState, writePersistedState } from './lib/sync/storage.js';
 import { readThemePref, applyTheme } from './lib/sync/theme.js';
 import { mergeLive } from './lib/sync/mergeLive.js';
@@ -24,7 +24,9 @@ import { MyTeamsView } from './components/views/MyTeamsView.jsx';
 import { DramaView } from './components/views/DramaView.jsx';
 import { StatsView } from './components/views/StatsView.jsx';
 import { BestThirdsView } from './components/views/BestThirdsView.jsx';
+import { CircleView } from './components/views/CircleView.jsx';
 import { GoalCelebration } from './components/ui/GoalCelebration.jsx';
+import { TabNav } from './components/ui/TabNav.jsx';
 
 function readMe() {
   try { const v = localStorage.getItem(ME_KEY); return OWNERS.includes(v) ? v : ""; } catch (e) { return ""; }
@@ -199,11 +201,7 @@ export default function App() {
 
       {!(state.liveCount || 0) && state.nextScheduled && <NextMatchBar match={state.nextScheduled}/>}
 
-      <nav className="wc-tabs" aria-label="Sections">
-        {TABS.map(([k, l]) => (
-          <button key={k} type="button" className={"wc-tab"+(tab===k?" is-on":"")} onClick={() => selectTab(k, setTab)}>{l}</button>
-        ))}
-      </nav>
+      <TabNav tab={tab} setTab={setTab}/>
 
       <main className="wc-main">
         {tab === "leaderboard" && <Leaderboard A={A} Aconf={Aconf} liveActive={liveActive} liveTeams={liveTeams}/>}
@@ -211,6 +209,7 @@ export default function App() {
         {tab === "groups"      && <GroupsView A={A} Aconf={Aconf} state={state} liveTeams={liveTeams} liveMatchMap={liveMatchMap}/>}
         {tab === "thirds"      && <BestThirdsView A={A} Aconf={Aconf} liveActive={liveActive}/>}
         {tab === "knockouts"   && <BracketView A={A} state={state} liveMatchMap={liveMatchMap}/>}
+        {tab === "circle"      && <CircleView A={A} state={state}/>}
         {tab === "h2h"         && <HeadToHead A={A} Aconf={Aconf} liveActive={liveActive}/>}
         {tab === "prizes"      && <PrizesView A={A} state={state}/>}
         {tab === "drama"       && <DramaView A={A} state={state}/>}
