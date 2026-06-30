@@ -24,6 +24,7 @@ import { MyTeamsView } from './components/views/MyTeamsView.jsx';
 import { DramaView } from './components/views/DramaView.jsx';
 import { StatsView } from './components/views/StatsView.jsx';
 import { BestThirdsView } from './components/views/BestThirdsView.jsx';
+import { CircleView } from './components/views/CircleView.jsx';
 import { GoalCelebration } from './components/ui/GoalCelebration.jsx';
 
 function readMe() {
@@ -211,6 +212,7 @@ export default function App() {
         {tab === "groups"      && <GroupsView A={A} Aconf={Aconf} state={state} liveTeams={liveTeams} liveMatchMap={liveMatchMap}/>}
         {tab === "thirds"      && <BestThirdsView A={A} Aconf={Aconf} liveActive={liveActive}/>}
         {tab === "knockouts"   && <BracketView A={A} state={state} liveMatchMap={liveMatchMap}/>}
+        {tab === "circle"      && <CircleView A={A} state={state}/>}
         {tab === "h2h"         && <HeadToHead A={A} Aconf={Aconf} liveActive={liveActive}/>}
         {tab === "prizes"      && <PrizesView A={A} state={state}/>}
         {tab === "drama"       && <DramaView A={A} state={state}/>}

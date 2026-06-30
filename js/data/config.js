@@ -9,6 +9,7 @@ export const TABS = [
   ["groups","Groups"],
   ["thirds","Best 3rds"],
   ["knockouts","Bracket"],
+  ["circle","Circle"],
   ["h2h","Head-to-head"],
   ["prizes","Prizes"],
   ["drama","Drama"],
