@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/joaotomaz-tc/tc-work-cup/compare/v1.0.0...v1.1.0) (2026-06-30)
+
+
+### Features
+
+* enhance scorer event handling and data aggregation ([4d0c629](https://github.com/joaotomaz-tc/tc-work-cup/commit/4d0c62985e0eff231313e9f9f9af21496e276fc2))
+
 # 1.0.0 (2026-06-30)
 
 
